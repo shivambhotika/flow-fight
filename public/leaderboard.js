@@ -30,7 +30,8 @@ function setActiveTab(bucket) {
 }
 
 function connect() {
-  ws = new WebSocket(`ws://${location.host}`);
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${wsProto}//${location.host}`);
   ws.onopen = () => ws.send(JSON.stringify({ type: 'station:join', stationId: 'display' }));
   ws.onmessage = (e) => {
     try { handleMsg(JSON.parse(e.data)); } catch (_) {}

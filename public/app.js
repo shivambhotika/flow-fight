@@ -59,7 +59,8 @@ let lastRoundResult = null;
 
 // ─── WebSocket ─────────────────────────────────────────────────────────────────
 function connectWS() {
-  ws = new WebSocket(`ws://${location.host}`);
+  const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(`${wsProto}//${location.host}`);
   ws.onopen = () => send({ type: 'station:join', stationId: STATION_ID });
 
   ws.onmessage = (e) => {
