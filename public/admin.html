@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Fight — Admin</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Figtree:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    html, body { overflow: auto; background: var(--lumen); color: var(--vast); }
+    body { padding: 40px; display: block; max-width: 900px; margin: 0 auto; }
+    h1 {
+      font-family: 'EB Garamond', serif;
+      font-size: 40px; font-weight: 400; letter-spacing: -0.03em;
+      margin-bottom: 4px; line-height: 1;
+    }
+    h1 span { color: var(--fathom); }
+    .admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 28px; }
+    .admin-card {
+      background: var(--lumen); border: 2px solid var(--border);
+      border-radius: var(--r-lg); padding: 20px 24px;
+    }
+    .admin-card h3 { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-dim); margin-bottom: 16px; font-weight: 700; }
+    .status-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; font-size: 14px; }
+    .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .status-dot.on  { background: #4ade80; }
+    .status-dot.off { background: #f87171; }
+    .field-row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
+    .field-label { font-size: 12px; color: var(--text-dim); font-weight: 500; }
+    .admin-input {
+      background: var(--lumen); border: 2px solid var(--border);
+      border-radius: var(--r-md); padding: 10px 14px;
+      color: var(--vast); font-family: 'Figtree', Arial, sans-serif; font-size: 14px;
+      outline: none; width: 100%; transition: border-color .15s;
+    }
+    .admin-input:focus { border-color: var(--focus); box-shadow: 0 0 0 4px #2d62ff20; }
+    .admin-select {
+      background: var(--lumen); border: 2px solid var(--border);
+      border-radius: var(--r-md); padding: 10px 14px;
+      color: var(--vast); font-family: 'Figtree', Arial, sans-serif; font-size: 14px;
+      outline: none; width: 100%; cursor: pointer;
+    }
+    .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .mode-check-grid { display: flex; flex-direction: column; gap: 8px; }
+    .mode-check { display: flex; align-items: center; gap: 10px; font-size: 14px; cursor: pointer; }
+    .mode-check input[type=checkbox] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--fathom); }
+    .import-area { width: 100%; height: 80px; resize: vertical; }
+    .full-width { grid-column: 1 / -1; }
+    .toast-status { font-size: 13px; color: var(--fathom); margin-left: 8px; opacity: 0; transition: opacity .3s; font-weight: 600; }
+    .toast-status.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<h1>FLOW <span>FIGHT</span> · Admin</h1>
+<p class="dim text-sm" style="margin-bottom:0">Event control panel</p>
+
+<div class="admin-grid">
+
+  <!-- Status -->
+  <div class="admin-card">
+    <h3>Server Status</h3>
+    <div class="status-row">
+      <span>Station 1</span>
+      <span><span class="status-dot" id="dot-s1"></span><span id="status-s1">—</span></span>
+    </div>
+    <div class="status-row">
+      <span>Station 2</span>
+      <span><span class="status-dot" id="dot-s2"></span><span id="status-s2">—</span></span>
+    </div>
+    <div class="status-row">
+      <span>Current mode</span>
+      <span id="status-mode" style="color:var(--fathom);font-weight:600">—</span>
+    </div>
+    <div class="status-row">
+      <span>State</span>
+      <span id="status-state" style="font-family:'IBM Plex Mono',monospace;font-size:13px">—</span>
+    </div>
+    <div class="status-row">
+      <span>Leaderboard entries</span>
+      <span id="status-lb">—</span>
+    </div>
+    <div class="btn-row" style="margin-top:12px">
+      <button class="btn btn-secondary btn-sm" onclick="fetchStatus()">↻ Refresh</button>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="admin-card">
+    <h3>Quick Actions</h3>
+    <div class="btn-row">
+      <button class="btn btn-danger btn-sm" onclick="apiPost('/api/reset')">⏹ Force Reset</button>
+      <button class="btn btn-danger btn-sm" onclick="clearLb()">🗑 Clear Leaderboard</button>
+    </div>
+    <div style="margin-top:16px">
+      <div class="field-label" style="margin-bottom:6px">Launch mode</div>
+      <div class="btn-row">
+        <select id="launch-mode-select" class="admin-select" style="flex:1">
+          <option value="swap-duel">Swap Duel</option>
+          <option value="voice-vs-keyboard">Voice vs Keyboard</option>
+          <option value="beat-the-keyboard">Beat the Keyboard</option>
+          <option value="keyboard-race">Keyboard Race</option>
+          <option value="hinglish-hustle">Hinglish Hustle</option>
+          <option value="prompt-royale">Prompt Royale</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="launchMode()">▶ Launch</button>
+      </div>
+    </div>
+    <div style="margin-top:16px">
+      <div class="field-label" style="margin-bottom:6px">Export data</div>
+      <div class="btn-row">
+        <a href="/api/export/runs.csv" class="btn btn-secondary btn-sm" download>⬇ Runs CSV</a>
+        <a href="/api/export/leaderboard.csv" class="btn btn-secondary btn-sm" download>⬇ Leaderboard CSV</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Event config -->
+  <div class="admin-card full-width">
+    <h3>Event Config <span class="toast-status" id="config-saved">Saved!</span></h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div class="field-row">
+        <label class="field-label">Event name</label>
+        <input type="text" id="cfg-eventName" class="admin-input" placeholder="Flow Fight">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Partner name</label>
+        <input type="text" id="cfg-partnerName" class="admin-input" placeholder="Partner Co.">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Default mode</label>
+        <select id="cfg-defaultMode" class="admin-select">
+          <option value="swap-duel">Swap Duel</option>
+          <option value="voice-vs-keyboard">Voice vs Keyboard</option>
+          <option value="beat-the-keyboard">Beat the Keyboard</option>
+          <option value="keyboard-race">Keyboard Race</option>
+          <option value="hinglish-hustle">Hinglish Hustle</option>
+          <option value="prompt-royale">Prompt Royale</option>
+        </select>
+      </div>
+      <div class="field-row">
+        <label class="field-label">Round duration (seconds)</label>
+        <input type="number" id="cfg-roundSeconds" class="admin-input" min="10" max="120" placeholder="25">
+      </div>
+      <div class="field-row">
+        <label class="field-label">QR URL</label>
+        <input type="text" id="cfg-qrUrl" class="admin-input" placeholder="https://wispr.ai">
+      </div>
+      <div class="field-row">
+        <label class="field-label">Results screen duration (s)</label>
+        <input type="number" id="cfg-resultsSeconds" class="admin-input" min="5" max="60" placeholder="15">
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <div class="field-label" style="margin-bottom:8px">Enabled modes</div>
+      <div class="mode-check-grid" id="mode-checks"></div>
+    </div>
+    <div class="btn-row" style="margin-top:16px">
+      <button class="btn btn-primary btn-sm" onclick="saveConfig()">Save Config</button>
+    </div>
+  </div>
+
+  <!-- Names import -->
+  <div class="admin-card full-width">
+    <h3>Attendee Names</h3>
+    <p class="dim text-sm" style="margin-bottom:10px">Paste one name per line to replace the current list.</p>
+    <textarea id="names-import" class="admin-input import-area" placeholder="Alice&#10;Bob&#10;Carol&#10;..."></textarea>
+    <div class="btn-row" style="margin-top:10px">
+      <button class="btn btn-secondary btn-sm" onclick="importNames()">Upload Names</button>
+      <span class="toast-status" id="names-saved">Imported!</span>
+    </div>
+  </div>
+
+</div>
+
+<script src="/admin.js"></script>
+</body>
+</html>

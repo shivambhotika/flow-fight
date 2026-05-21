@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Flow Fight</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;0,700;0,800;1,400&family=Figtree:wght@400;500;600;700;800;900&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+<div class="station-badge" id="station-badge">STATION 1</div>
+<div id="notification-layer"></div>
+
+<!-- CONNECTING -->
+<div id="screen-connecting" class="screen active">
+  <div class="center-stack">
+    <div class="spinner"></div>
+    <p class="dim text-sm">Connecting to Flow Fight server…</p>
+  </div>
+</div>
+
+<!-- IDLE -->
+<div id="screen-idle" class="screen">
+  <div class="idle-layout">
+    <div class="idle-hero">
+      <div class="game-title">FLOW<br><span>FIGHT</span></div>
+      <p class="game-tagline">Can your keyboard keep up with your voice?</p>
+      <p class="press-any-key">Press any key to start</p>
+    </div>
+    <div class="idle-lb">
+      <div class="lb-title">Top Flow Scores</div>
+      <div id="idle-leaderboard" class="lb-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODE SELECT -->
+<div id="screen-mode-select" class="screen">
+  <div class="mode-select-heading">Choose your battle</div>
+  <div class="mode-grid" id="mode-grid"></div>
+  <p class="dim text-sm" style="margin-top:8px">Select a mode or staff will configure one</p>
+</div>
+
+<!-- NAME ENTRY -->
+<div id="screen-name-entry" class="screen">
+  <div class="name-entry-wrap">
+    <h2>Who are you?</h2>
+
+    <div class="top-slot">
+      <div id="speech-section" class="speech-row">
+        <button class="speech-btn" id="speech-btn" onclick="startListening()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+            <line x1="8" y1="23" x2="16" y2="23"/>
+          </svg>
+        </button>
+        <p class="speech-status" id="speech-status">Tap to speak your name</p>
+      </div>
+
+      <div id="confirm-section" class="confirm-section" style="display:none">
+        <div class="confirm-label">Ready to race as</div>
+        <div class="confirm-name" id="selected-name"></div>
+        <div class="company-row">
+          <label class="company-label">Company (optional)</label>
+          <input type="text" id="company-input" class="name-search" placeholder="e.g. Wispr, Acme Corp…" style="padding:10px 14px;font-size:14px">
+        </div>
+        <div class="confirm-actions">
+          <button class="btn btn-primary" onclick="confirmName()">That's me — Let's race →</button>
+          <button class="btn btn-ghost" onclick="clearName()">Not me</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="search-divider"><span>or search by name</span></div>
+
+    <input
+      type="text"
+      id="name-search"
+      class="name-search"
+      placeholder="Type to search…"
+      autocomplete="off"
+      spellcheck="false"
+      oninput="onNameSearch(this.value)"
+    >
+
+    <div id="name-list" class="name-list"></div>
+  </div>
+</div>
+
+<!-- WAITING -->
+<div id="screen-waiting" class="screen">
+  <div class="waiting-layout">
+    <div class="waiting-mode-label" id="waiting-mode-label"></div>
+    <div class="waiting-card you-card">
+      <div class="waiting-player-name" id="waiting-your-name">YOU</div>
+      <div class="waiting-badge">READY</div>
+    </div>
+    <div class="vs-divider">VS</div>
+    <div class="waiting-card" id="waiting-opp-card">
+      <div class="waiting-player-name dim" id="waiting-opp-name"></div>
+      <div class="waiting-status" id="waiting-opp-status">
+        <span class="dot-pulse">●</span> Waiting for opponent…
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- COUNTDOWN -->
+<div id="screen-countdown" class="screen">
+  <div class="center-stack countdown-stack" style="gap:16px">
+    <div class="countdown-mode-badge" id="countdown-mode-label"></div>
+    <div class="countdown-players">
+      <span class="countdown-pname" id="countdown-p1-name"></span>
+      <span class="countdown-vs">VS</span>
+      <span class="countdown-pname" id="countdown-p2-name"></span>
+    </div>
+    <div class="countdown-number" id="countdown-number">3</div>
+    <div class="countdown-input-hint" id="countdown-input-hint"></div>
+    <div class="countdown-prompt-preview" id="countdown-prompt"></div>
+  </div>
+</div>
+
+<!-- RACING -->
+<div id="screen-racing" class="screen">
+  <div class="racing-layout">
+
+    <div class="race-header">
+      <div class="race-mode-badge" id="race-mode-badge"></div>
+      <div class="race-timer" id="race-timer">0:00</div>
+      <div class="race-station-label" id="race-station-label"></div>
+    </div>
+
+    <div class="race-progress-section">
+      <div class="progress-col you-col">
+        <div class="progress-header">
+          <span class="progress-name you-name" id="your-name-display">YOU</span>
+          <span class="progress-wpm"><span id="your-wpm">0</span><small>WPM</small></span>
+        </div>
+        <div class="progress-track">
+          <div id="your-progress-bar" class="progress-fill you"></div>
+        </div>
+        <span class="progress-pct" id="your-progress-pct">0%</span>
+      </div>
+      <div class="progress-col opp-col">
+        <div class="progress-header">
+          <span class="progress-name opp-name" id="opp-name-display">OPPONENT</span>
+          <span class="progress-wpm"><span id="opp-wpm">0</span><small>WPM</small></span>
+        </div>
+        <div class="progress-track">
+          <div id="opp-progress-bar" class="progress-fill opp"></div>
+        </div>
+        <span class="progress-pct" id="opp-progress-pct">0%</span>
+      </div>
+    </div>
+
+    <!-- Keyboard input -->
+    <div class="keyboard-area" id="keyboard-area">
+      <div id="typing-display" class="typing-display"></div>
+    </div>
+
+    <!-- Voice input -->
+    <div class="voice-area" id="voice-area" style="display:none">
+      <div class="voice-target" id="voice-target-text"></div>
+      <textarea
+        id="voice-textarea"
+        class="voice-textarea"
+        placeholder="Click here, trigger Wispr Flow, and speak your text…"
+        spellcheck="false"
+        autocomplete="off"
+      ></textarea>
+      <div class="voice-instruction">
+        <div class="voice-pulse"></div>
+        Speak naturally. Flow will fill this box.
+      </div>
+    </div>
+
+    <div id="finish-message" class="finish-message" style="display:none">
+      <div class="finish-title">FINISHED!</div>
+      <div class="finish-wpm"><span id="finish-wpm">0</span> <small>WPM</small></div>
+      <div class="finish-sub">Waiting for opponent…</div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ROUND TRANSITION -->
+<div id="screen-round-transition" class="screen">
+  <div class="center-stack" style="gap:20px;max-width:500px;width:100%;padding:40px">
+    <div class="rt-label">Round complete</div>
+    <div class="rt-heading">Switch input modes.</div>
+    <div class="rt-mini-results" id="rt-mini-results"></div>
+    <div class="rt-next-assignment" id="rt-next-assignment"></div>
+    <div class="rt-timer" id="rt-timer">5</div>
+    <div class="rt-sub dim">Next round starting…</div>
+  </div>
+</div>
+
+<!-- RESULTS -->
+<div id="screen-results" class="screen">
+  <div class="results-wrap">
+    <div id="result-banner" class="result-banner"></div>
+
+    <div class="result-scores" id="result-scores"></div>
+
+    <div id="voice-advantage-banner" class="voice-advantage-banner" style="display:none">
+      <div class="va-number" id="va-number"></div>
+      <div class="va-label">faster with voice</div>
+    </div>
+
+    <div id="badges-section">
+      <div class="lb-title" style="text-align:center;margin-bottom:8px">Badges Unlocked</div>
+      <div class="badges-row" id="badges-row"></div>
+    </div>
+
+    <div>
+      <div class="lb-title" style="margin-bottom:8px">Leaderboard</div>
+      <div id="result-leaderboard" class="lb-list"></div>
+    </div>
+
+    <p class="next-race-row">Next round in <span id="next-race-timer">15</span>s</p>
+  </div>
+</div>
+
+<!-- CTA -->
+<div id="screen-cta" class="screen">
+  <div class="cta-headline" id="cta-headline">Try <span>Wispr Flow</span></div>
+  <p class="cta-subline" id="cta-subline">Talk faster than you type.</p>
+  <div class="cta-qr">
+    <img id="cta-qr-img" src="" alt="QR Code" width="160" height="160">
+  </div>
+  <p class="cta-url" id="cta-url"></p>
+</div>
+
+<!-- SPECTATOR -->
+<div id="screen-spectator" class="screen">
+  <div class="center-stack">
+    <div class="spectator-label">Solo game in progress</div>
+    <p class="dim text-sm">Watching Station 1…</p>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
