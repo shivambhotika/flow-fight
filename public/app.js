@@ -224,6 +224,7 @@ function populateNameEntry() {
   el('company-input').value = '';
   el('confirm-section').style.display = 'none';
   el('speech-section').style.display = '';
+  el('adhoc-section').style.display = 'none';
   el('selected-name').textContent = '';
   renderNameList(names);
   setupSpeech();
@@ -231,8 +232,26 @@ function populateNameEntry() {
 }
 
 function onNameSearch(query) {
-  const q = query.toLowerCase();
-  renderNameList(q ? names.filter(n => n.toLowerCase().includes(q)) : names);
+  const q = query.toLowerCase().trim();
+  const filtered = q ? names.filter(n => n.toLowerCase().includes(q)) : names;
+  renderNameList(filtered);
+  // Show ad hoc button if query has 2+ chars and no exact match
+  const adhoc = el('adhoc-section');
+  const preview = el('adhoc-name-preview');
+  if (q.length >= 2 && !names.some(n => n.toLowerCase() === q)) {
+    const display = query.trim().replace(/\b\w/g, c => c.toUpperCase());
+    preview.textContent = display;
+    adhoc.style.display = '';
+  } else {
+    adhoc.style.display = 'none';
+  }
+}
+
+function useAdhocName() {
+  const raw = el('name-search').value.trim();
+  if (!raw) return;
+  const display = raw.replace(/\b\w/g, c => c.toUpperCase());
+  selectName(display);
 }
 
 function renderNameList(list) {
@@ -260,6 +279,7 @@ function clearName() {
   playerName = null;
   el('confirm-section').style.display = 'none';
   el('speech-section').style.display = '';
+  el('adhoc-section').style.display = 'none';
   renderNameList(names);
 }
 
@@ -340,7 +360,7 @@ function populateWaiting() {
   if (otherP) {
     el('waiting-opp-name').textContent = otherP.name;
     el('waiting-opp-name').style.display = '';
-    el('waiting-opp-status').innerHTML = '<span style="color:var(--green)">● READY</span>';
+    el('waiting-opp-status').innerHTML = '<span style="color:var(--success)">● READY</span>';
   } else {
     el('waiting-opp-name').style.display = 'none';
     el('waiting-opp-status').innerHTML = '<span class="dot-pulse">●</span> Waiting for opponent…';
@@ -577,7 +597,7 @@ function populateRoundTransition() {
       <div class="rt-score-block">
         <div class="rt-score-name">${esc(r.playerName || r.stationId)}</div>
         <div class="rt-score-num">${r.usableWpm}<small> WPM</small></div>
-        <div style="font-size:11px;color:var(--dim)">${r.inputMode.toUpperCase()}</div>
+        <div style="font-size:11px;color:var(--text-dim)">${r.inputMode.toUpperCase()}</div>
       </div>`).join('<div style="width:1px;background:var(--border);margin:0 8px"></div>');
   }
 
