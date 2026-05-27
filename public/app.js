@@ -56,6 +56,14 @@ let roundDurationSecs   = 60;
 let oppWordCount        = 0;
 let isMultiLineRound    = false;
 
+// Voice focus tracking
+let voiceFocused        = false;
+
+// Camera callout tracking
+let voiceLeadNotified   = false;
+let voicex2Notified     = false;
+let flashTimer          = null;
+
 // Timers
 let wpmTimer      = null;
 let clockTimer    = null;
@@ -448,13 +456,11 @@ function populateRacing() {
   el('your-progress-bar').style.width = '0%';
   el('opp-progress-bar').style.width  = '0%';
 
-  // Role label
-  if (currentMode === 'voice') {
-    el('role-label').style.display = '';
-    el('role-label-text').textContent = '🎙️ VOICE MODE — Click the text box below, then dictate with Wispr Flow';
-  } else {
-    el('role-label').style.display = 'none';
-  }
+  // Role label — always shown, styled by mode
+  voiceFocused = false;
+  voiceLeadNotified = false;
+  voicex2Notified   = false;
+  setRoleLabel(currentMode, false);
 
   // Completed lines feed
   el('completed-lines-feed').innerHTML = '';
@@ -527,8 +533,36 @@ function renderTypingDisplay() {
 // ── Voice mode ─────────────────────────────────────────────────────────────────
 function setupVoiceInput(ta) {
   ta.removeEventListener('input', onVoiceInput);
+  ta.removeEventListener('focus', onVoiceFocus);
+  ta.removeEventListener('blur',  onVoiceBlur);
   ta.addEventListener('input', onVoiceInput);
+  ta.addEventListener('focus', onVoiceFocus);
+  ta.addEventListener('blur',  onVoiceBlur);
   setTimeout(() => { ta.focus(); }, 200);
+}
+
+function onVoiceFocus() {
+  voiceFocused = true;
+  setRoleLabel('voice', true);
+}
+function onVoiceBlur() {
+  voiceFocused = false;
+  if (deriveScreen() === 'racing' && currentMode === 'voice') setRoleLabel('voice', false);
+}
+
+function setRoleLabel(mode, focused) {
+  const lbl  = el('role-label');
+  const text = el('role-label-text');
+  if (!lbl || !text) return;
+  if (mode === 'voice') {
+    lbl.className = focused ? 'role-label mode-voice voice-focused' : 'role-label mode-voice';
+    text.textContent = focused
+      ? '🎙️ FLOW IS READY — Speak your line now'
+      : '⚠️ CLICK THE BOX BELOW — so Wispr Flow knows where to type';
+  } else {
+    lbl.className = 'role-label mode-keyboard';
+    text.textContent = '⌨️ YOU ARE TYPING';
+  }
 }
 
 function onVoiceInput(e) {
@@ -594,38 +628,45 @@ function lineComplete(inputMode) {
   // Tell server
   send({ type: 'line:complete', stationId: STATION_ID, lineIdx: currentLineIndex, wordCount });
 
-  // Advance locally
+  // Brief visual flash
+  showLineCompleteFlash();
+
+  // Advance locally — loop queue when exhausted
   currentLineIndex++;
-
   if (currentLineIndex >= lineQueue.length) {
-    // All lines done
-    el('current-line-display').textContent = '🎉 All lines done! Timer keeps running…';
-    if (inputMode === 'keyboard') {
-      el('keyboard-area').style.display = 'none';
-    } else {
-      const ta = el('voice-textarea');
-      if (ta) { ta.value = ''; ta.disabled = true; }
-    }
-  } else {
-    currentPrompt = lineQueue[currentLineIndex].text;
-    typedText = '';
+    // Shuffle and loop the queue for variety
+    lineQueue = [...lineQueue].sort(() => Math.random() - 0.5);
+    currentLineIndex = 0;
+  }
 
-    if (inputMode === 'keyboard') {
-      renderTypingDisplay();
-    } else {
-      const ta = el('voice-textarea');
-      if (ta) {
-        ta.value = '';
-        ta.focus(); // Keep focused for Wispr Flow
-      }
-      el('current-line-display').textContent = currentPrompt;
+  currentPrompt = lineQueue[currentLineIndex].text;
+  typedText = '';
+
+  if (inputMode === 'keyboard') {
+    renderTypingDisplay();
+  } else {
+    const ta = el('voice-textarea');
+    if (ta) {
+      ta.value = '';
+      ta.focus(); // Keep focused for Wispr Flow
     }
+    el('current-line-display').textContent = currentPrompt;
   }
 
   updateCompletedFeed();
   updateLineIndicator();
   el('your-words').textContent = completedWords;
+  el('race-footer-words').textContent = `${completedWords} word${completedWords !== 1 ? 's' : ''} completed`;
   updateProgressBar(completedWords, oppWordCount);
+  checkCameraCallouts();
+}
+
+function showLineCompleteFlash() {
+  const flash = el('line-complete-flash');
+  if (!flash) return;
+  clearTimeout(flashTimer);
+  flash.style.display = '';
+  flashTimer = setTimeout(() => { flash.style.display = 'none'; }, 800);
 }
 
 // ── Progress display helpers ───────────────────────────────────────────────────
@@ -685,12 +726,18 @@ function updateRaceStats() {
 
   if (isMultiLineRound) {
     el('your-words').textContent = completedWords;
+    // Live WPM = completedWords / elapsed minutes
+    if (raceStartTime) {
+      const mins = Math.max((Date.now() - raceStartTime) / 60000, 0.01);
+      el('your-wpm').textContent = Math.round(completedWords / mins);
+    }
     updateProgressBar(completedWords, oppWordCount);
   } else if (currentMode === 'keyboard') {
-    // Single-prompt WPM display (repurpose your-words for WPM)
+    // Single-prompt WPM display
     const wpm = calcWpm(typedText);
     const pct = currentPrompt.length > 0 ? typedText.length / currentPrompt.length : 0;
     el('your-words').textContent = wpm;
+    el('your-wpm').textContent   = wpm;
     el('your-progress-bar').style.width = `${Math.round(pct * 100)}%`;
   }
 }
@@ -703,12 +750,35 @@ function calcWpm(text) {
   return Math.round((correct / 5) / mins);
 }
 
+function checkCameraCallouts() {
+  if (!isMultiLineRound) return;
+  // Determine which is voice and which is keyboard
+  const voiceWords = currentMode === 'voice' ? completedWords : oppWordCount;
+  const kbWords    = currentMode === 'voice' ? oppWordCount  : completedWords;
+  if (voiceWords === 0 || kbWords === 0) return;
+
+  if (!voiceLeadNotified && voiceWords > kbWords) {
+    voiceLeadNotified = true;
+    notify('🎙️ Voice takes the lead!', 'callout');
+  }
+  if (!voicex2Notified && voiceWords >= kbWords * 2) {
+    voicex2Notified = true;
+    notify('🔥 2× output with Flow!', 'callout');
+  }
+}
+
 function onOpponentUpdate(progress, usableWpm, wordCount) {
   if (wordCount !== undefined) {
     // Multi-line mode: show word count
     oppWordCount = wordCount;
     el('opp-words').textContent = wordCount;
+    // Rough WPM for opponent
+    if (isMultiLineRound && raceStartTime) {
+      const mins = Math.max((Date.now() - raceStartTime) / 60000, 0.01);
+      el('opp-wpm').textContent = Math.round(wordCount / mins);
+    }
     updateProgressBar(completedWords, oppWordCount);
+    checkCameraCallouts();
   } else {
     // Single-prompt mode fallback
     el('opp-progress-bar').style.width = `${Math.round((progress || 0) * 100)}%`;
@@ -785,77 +855,118 @@ function populateResults() {
   const s = serverSession;
   if (!s) return;
 
-  const winner = s.winner;
-  const scores = s.playerScores || {};
-  const isSolo = winner?.type === 'solo';
-  const isTie  = winner?.type === 'tie';
-  const iAm    = winner?.stationId === STATION_ID;
+  const winner   = s.winner;
+  const scores   = s.playerScores || {};
+  const allSc    = Object.values(scores);
+  const isSolo   = winner?.type === 'solo';
+  const isTie    = winner?.type === 'tie';
+  const iAm      = winner?.stationId === STATION_ID;
+  const anyMultiLine = s.rounds?.some(r => r.isMultiLine);
+  const unit     = anyMultiLine ? 'words' : 'WPM';
 
-  // Banner
+  // Compute aggregate voice/keyboard across all players for solo+swap-duel
+  const allKb    = allSc.map(sc => sc.keyboardWords ?? sc.keyboardWpm ?? 0);
+  const allVo    = allSc.map(sc => sc.voiceWords    ?? sc.voiceWpm    ?? 0);
+  const hasVoice = allVo.some(v => v > 0);
+  const hasKb    = allKb.some(k => k > 0);
+
+  // ── Banner ──
   const banner = el('result-banner');
-  if (isSolo) {
-    banner.textContent = `${esc(winner.name)} — SOLO COMPLETE`;
+  if (isSolo && hasVoice && hasKb) {
+    const kb = allKb[0]; const vo = allVo[0];
+    const mult = kb > 0 ? (vo / kb).toFixed(1) : null;
+    banner.innerHTML = mult
+      ? `${mult}× more output with Flow`
+      : `${vo} words with Flow`;
+    banner.className = 'result-banner voice-lift';
+  } else if (isSolo) {
+    banner.textContent = `${esc(winner?.name || 'Done')} — Round Complete`;
     banner.className = 'result-banner solo';
   } else if (isTie) {
     banner.textContent = "IT'S A TIE!";
     banner.className = 'result-banner tie';
   } else if (iAm) {
-    banner.textContent = `${esc(winner.name)} WINS! 🏆`;
+    banner.textContent = `${esc(winner?.name || 'You')} WINS! 🏆`;
     banner.className = 'result-banner win';
   } else {
     banner.textContent = `${esc(winner?.name || '??')} WINS`;
     banner.className = 'result-banner lose';
   }
 
-  // Score cards
+  // ── Voice Output Comparison Section ──
+  const voSection = el('voice-output-section');
+  const voCards   = el('vo-cards');
+  const vaNum     = el('va-number');
+  const vaLbl     = el('va-label');
+
+  if (hasVoice && anyMultiLine) {
+    voSection.style.display = '';
+
+    // For solo: show single player comparison
+    // For two-player: pick the player at this station
+    const mySc  = scores[STATION_ID] || allSc[0] || {};
+    const kb    = mySc.keyboardWords ?? mySc.keyboardWpm ?? 0;
+    const vo    = mySc.voiceWords    ?? mySc.voiceWpm    ?? 0;
+    const extra = mySc.extraWords    ?? Math.max(0, vo - kb);
+    const mult  = mySc.voiceMultiplier ?? (kb > 0 && vo > 0 ? Math.round((vo/kb)*10)/10 : null);
+
+    voCards.innerHTML = `
+      <div class="vo-card kb-card">
+        <div class="vo-card-icon">⌨️</div>
+        <div class="vo-card-label">Keyboard</div>
+        <div class="vo-card-words">${kb}</div>
+        <div class="vo-card-sublabel">${unit} in ${s.currentRound?.durationSeconds || 60}s</div>
+      </div>
+      <div class="vo-card flow-card">
+        <div class="vo-card-icon">🎙️</div>
+        <div class="vo-card-label">Wispr Flow</div>
+        <div class="vo-card-words">${vo}</div>
+        <div class="vo-card-sublabel">${unit} in ${s.currentRound?.durationSeconds || 60}s</div>
+      </div>`;
+
+    if (mult !== null && mult > 0) {
+      vaNum.textContent = `${mult}×`;
+      vaLbl.textContent = 'more output with Flow';
+    } else if (extra > 0) {
+      vaNum.textContent = `+${extra}`;
+      vaLbl.textContent = `extra ${unit} with Flow`;
+    } else if (vo > 0 && kb === 0) {
+      vaNum.textContent = `${vo}`;
+      vaLbl.textContent = `${unit} spoken`;
+    } else {
+      voSection.style.display = 'none';
+    }
+  } else {
+    voSection.style.display = 'none';
+  }
+
+  // ── Per-player score cards ──
   const scoresEl = el('result-scores');
   const players  = s.players || {};
   const sids     = Object.keys(players).map(Number);
 
   scoresEl.innerHTML = sids.map(sid => {
-    const p    = players[sid];
-    const sc   = scores[sid] || {};
-    const isW  = winner?.stationId === sid;
-    const hasKb    = (sc.keyboardWords || sc.keyboardWpm) > 0;
-    const hasVoice = (sc.voiceWords || sc.voiceWpm) > 0;
-    const kbWords  = sc.keyboardWords ?? sc.keyboardWpm ?? 0;
-    const voWords  = sc.voiceWords ?? sc.voiceWpm ?? 0;
-
-    // Detect if any round was multi-line (show "words" label)
-    const anyMultiLine = s.rounds?.some(r => r.isMultiLine);
-    const unit = anyMultiLine ? 'words' : 'WPM';
+    const p      = players[sid];
+    const sc     = scores[sid] || {};
+    const isW    = winner?.stationId === sid;
+    const kbW    = sc.keyboardWords ?? sc.keyboardWpm ?? 0;
+    const voW    = sc.voiceWords    ?? sc.voiceWpm    ?? 0;
+    const hasKbP = kbW > 0;
+    const hasVoP = voW > 0;
 
     return `<div class="result-player ${isW ? 'winner' : ''}">
       <div class="result-pname">${esc(p?.name || `Station ${sid}`)}</div>
       <div class="result-flow-score">${sc.totalFlow || 0}</div>
       <div class="result-flow-label">Flow Score</div>
       <div class="result-detail-row">
-        ${hasKb    ? `<div class="result-stat"><div class="result-stat-val kb-val">${kbWords}</div><div class="result-stat-label">KB ${unit}</div></div>` : ''}
-        ${hasVoice ? `<div class="result-stat"><div class="result-stat-val voice-val">${voWords}</div><div class="result-stat-label">Voice ${unit}</div></div>` : ''}
+        ${hasKbP ? `<div class="result-stat"><div class="result-stat-val kb-val">${kbW}</div><div class="result-stat-label">⌨️ ${unit}</div></div>` : ''}
+        ${hasVoP ? `<div class="result-stat"><div class="result-stat-val voice-val">${voW}</div><div class="result-stat-label">🎙️ ${unit}</div></div>` : ''}
       </div>
     </div>`;
-  }).join('<div class="result-vs">VS</div>');
+  }).join(sids.length > 1 ? '<div class="result-vs">VS</div>' : '');
 
-  // Voice advantage banner
-  const allScores = Object.values(scores);
-  const maxVM = Math.max(...allScores.map(s => s.voiceMultiplier || s.voiceAdvantage || 0));
-  const maxExtra = Math.max(...allScores.map(s => s.extraWords || 0));
-  const vaEl = el('voice-advantage-banner');
-  if (maxVM > 0 || maxExtra > 0) {
-    vaEl.style.display = '';
-    if (maxVM > 0) {
-      el('va-number').textContent = `${maxVM}×`;
-      el('va-label').textContent  = 'faster with voice';
-    } else {
-      el('va-number').textContent = `+${maxExtra}`;
-      el('va-label').textContent  = 'extra words with voice';
-    }
-  } else {
-    vaEl.style.display = 'none';
-  }
-
-  // Badges
-  const allBadges = [...new Set(allScores.flatMap(s => s.badges || []))];
+  // ── Badges ──
+  const allBadges = [...new Set(allSc.flatMap(sc => sc.badges || []))];
   const badgesEl = el('badges-row');
   if (allBadges.length) {
     badgesEl.innerHTML = allBadges.map(b => {
@@ -868,13 +979,13 @@ function populateResults() {
     el('badges-section').style.display = 'none';
   }
 
-  // Leaderboard
+  // ── Leaderboard ──
   fetch('/api/leaderboard')
     .then(r => r.json())
     .then(entries => renderLeaderboard(entries, 'result-leaderboard'))
     .catch(() => renderLeaderboard([], 'result-leaderboard'));
 
-  // Countdown
+  // ── Countdown ──
   let secs = serverConfig?.resultsSeconds || 15;
   el('next-race-timer').textContent = secs;
   clearInterval(nextRaceTimer);

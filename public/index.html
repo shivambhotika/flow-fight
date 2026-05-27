@@ -145,22 +145,22 @@
       <div class="score-col you-col">
         <div class="score-header">
           <span class="score-name you-name" id="your-name-display">YOU</span>
-          <span class="score-val"><span id="your-words">0</span><small> words</small></span>
+          <span class="score-val"><span id="your-words">0</span><small> words</small> <span class="score-wpm-val">· <span id="your-wpm">0</span><small> WPM</small></span></span>
         </div>
         <div class="score-track"><div id="your-progress-bar" class="score-fill you"></div></div>
       </div>
       <div class="score-col opp-col">
         <div class="score-header">
           <span class="score-name opp-name" id="opp-name-display">OPPONENT</span>
-          <span class="score-val"><span id="opp-words">0</span><small> words</small></span>
+          <span class="score-val"><span id="opp-words">0</span><small> words</small> <span class="score-wpm-val">· <span id="opp-wpm">0</span><small> WPM</small></span></span>
         </div>
         <div class="score-track"><div id="opp-progress-bar" class="score-fill opp"></div></div>
       </div>
     </div>
 
-    <!-- Voice mode role hint -->
-    <div class="role-label" id="role-label" style="display:none">
-      <span id="role-label-text"></span>
+    <!-- Role label — always shown, styled per mode/focus state -->
+    <div class="role-label mode-keyboard" id="role-label">
+      <span id="role-label-text">⌨️ YOU ARE TYPING</span>
     </div>
 
     <!-- Scrollable lines area -->
@@ -193,9 +193,12 @@
       </div>
     </div>
 
+    <!-- Line complete flash overlay -->
+    <div id="line-complete-flash" class="line-complete-flash" style="display:none">✓ Line complete</div>
+
     <div class="race-footer">
       <span id="race-line-indicator" class="race-line-indicator">Line 1</span>
-      <span class="race-footer-hint">Complete each line to score words</span>
+      <span id="race-footer-words" class="race-footer-words">0 words completed</span>
     </div>
 
   </div>
@@ -218,12 +221,17 @@
   <div class="results-wrap">
     <div id="result-banner" class="result-banner"></div>
 
-    <div class="result-scores" id="result-scores"></div>
-
-    <div id="voice-advantage-banner" class="voice-advantage-banner" style="display:none">
-      <div class="va-number" id="va-number"></div>
-      <div class="va-label" id="va-label">faster with voice</div>
+    <!-- Voice output comparison — shown when voice data exists, comes first -->
+    <div id="voice-output-section" class="voice-output-section" style="display:none">
+      <div class="vo-cards" id="vo-cards"></div>
+      <div id="voice-advantage-banner" class="voice-advantage-banner">
+        <div class="va-number" id="va-number"></div>
+        <div class="va-label" id="va-label">more words with Flow</div>
+      </div>
     </div>
+
+    <!-- Traditional score cards (flow score + per-player breakdown) -->
+    <div class="result-scores" id="result-scores"></div>
 
     <div id="badges-section">
       <div class="lb-title" style="text-align:center;margin-bottom:8px">Badges Unlocked</div>
