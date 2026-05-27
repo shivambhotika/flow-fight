@@ -1,10 +1,10 @@
 'use strict';
 
-const ALL_MODES = ['swap-duel', 'voice-vs-keyboard', 'beat-the-keyboard', 'keyboard-race', 'hinglish-hustle', 'prompt-royale'];
+const ALL_MODES = ['swap-duel', 'voice-vs-keyboard', 'beat-the-keyboard', 'solo-output', 'keyboard-race', 'hinglish-hustle', 'prompt-royale'];
 const MODE_LABELS = {
   'swap-duel': 'Swap Duel', 'voice-vs-keyboard': 'Voice vs Keyboard',
-  'beat-the-keyboard': 'Beat the Keyboard', 'keyboard-race': 'Keyboard Race',
-  'hinglish-hustle': 'Hinglish Hustle', 'prompt-royale': 'Prompt Royale',
+  'beat-the-keyboard': 'Beat the Keyboard', 'solo-output': 'Solo Output Challenge',
+  'keyboard-race': 'Keyboard Race', 'hinglish-hustle': 'Hinglish Hustle', 'prompt-royale': 'Prompt Royale',
 };
 
 let currentConfig = {};
@@ -59,7 +59,7 @@ function saveConfig() {
     eventName:     getVal('cfg-eventName'),
     partnerName:   getVal('cfg-partnerName'),
     defaultMode:   getVal('cfg-defaultMode'),
-    roundSeconds:  parseInt(getVal('cfg-roundSeconds')) || 25,
+    roundSeconds:  parseInt(getVal('cfg-roundSeconds')) || 60,
     qrUrl:         getVal('cfg-qrUrl'),
     resultsSeconds:parseInt(getVal('cfg-resultsSeconds')) || 15,
     enabledModes:  enabled,

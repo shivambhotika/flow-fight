@@ -12,7 +12,7 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server });
 
-// Resolve public directory — handles Vercel's serverless __dirname variation
+// Resolve public directory
 const PUBLIC_DIR = [
   path.join(__dirname, 'public'),
   path.join(process.cwd(), 'public'),
@@ -39,22 +39,22 @@ function saveJson(file, data) {
     fs.mkdirSync(DATA, { recursive: true });
     fs.writeFileSync(path.join(DATA, file), JSON.stringify(data, null, 2));
   } catch (_) {
-    // Silently skip on read-only filesystems (e.g. Vercel serverless)
+    // Silently skip on read-only filesystems (e.g. Render free tier ephemeral)
   }
 }
 
-let config    = loadJson('event-config.json', defaultConfig());
+let config      = loadJson('event-config.json', defaultConfig());
 let leaderboard = loadJson('leaderboard.json', []);
-let runs      = loadJson('runs.json', []);
-let names     = loadJson('names.json', []);
-let promptsDb = loadJson('prompts.json', []);
+let runs        = loadJson('runs.json', []);
+let names       = loadJson('names.json', []);
+let promptsDb   = loadJson('prompts.json', []);
 
 function defaultConfig() {
   return {
     eventId: 'event_001', eventName: 'Flow Fight', partnerName: '',
     defaultMode: 'swap-duel',
-    enabledModes: ['swap-duel','voice-vs-keyboard','beat-the-keyboard','keyboard-race','hinglish-hustle','prompt-royale'],
-    roundSeconds: 25, countdownSeconds: 3, resultsSeconds: 15, ctaSeconds: 10,
+    enabledModes: ['swap-duel','voice-vs-keyboard','beat-the-keyboard','solo-output','keyboard-race','hinglish-hustle','prompt-royale'],
+    roundSeconds: 60, countdownSeconds: 3, resultsSeconds: 15, ctaSeconds: 10,
     enableVoiceMode: true, enableHinglish: true, enableQrCta: true,
     qrUrl: 'https://wispr.ai', qrLabel: 'Try Wispr Flow', leaderboardLimit: 20,
   };
@@ -62,18 +62,20 @@ function defaultConfig() {
 
 // ─── Mode definitions ──────────────────────────────────────────────────────────
 const MODES = {
-  'keyboard-race':     { label: 'Keyboard Race',     tagline: 'Classic WPM race.', icon: '⌨️',  playerCount: 2, rounds: 1 },
-  'voice-vs-keyboard': { label: 'Voice vs Keyboard', tagline: 'One talks. One types.', icon: '🎙️', playerCount: 2, rounds: 1 },
-  'swap-duel':         { label: 'Swap Duel',          tagline: 'Both do both. Fairest battle.', icon: '🔄', playerCount: 2, rounds: 2 },
-  'beat-the-keyboard': { label: 'Beat the Keyboard',  tagline: 'Solo challenge.', icon: '🥊',    playerCount: 1, rounds: 2 },
-  'hinglish-hustle':   { label: 'Hinglish Hustle',    tagline: 'Mix it up.', icon: '🇮🇳',         playerCount: 2, rounds: 1 },
-  'prompt-royale':     { label: 'Prompt Royale',      tagline: 'Real-world writing.', icon: '✍️', playerCount: 2, rounds: 1 },
+  'keyboard-race':     { label: 'Keyboard Race',          tagline: 'Classic WPM race.', icon: '⌨️',  playerCount: 2, rounds: 1 },
+  'voice-vs-keyboard': { label: 'Voice vs Keyboard',      tagline: 'One talks. One types.', icon: '🎙️', playerCount: 2, rounds: 1 },
+  'swap-duel':         { label: 'Swap Duel',               tagline: 'Both do both. Fairest battle.', icon: '🔄', playerCount: 2, rounds: 2 },
+  'beat-the-keyboard': { label: 'Beat the Keyboard',       tagline: 'Solo: type then speak.', icon: '🥊', playerCount: 1, rounds: 2 },
+  'solo-output':       { label: 'Solo Output Challenge',   tagline: '60s — how many words?', icon: '⚡', playerCount: 1, rounds: 1 },
+  'hinglish-hustle':   { label: 'Hinglish Hustle',         tagline: 'Mix it up.', icon: '🇮🇳',         playerCount: 2, rounds: 1 },
+  'prompt-royale':     { label: 'Prompt Royale',           tagline: 'Real-world writing.', icon: '✍️', playerCount: 2, rounds: 1 },
 };
 
 function getRoundAssignments(mode, roundIndex) {
   if (mode === 'voice-vs-keyboard') return { 1: 'keyboard', 2: 'voice' };
   if (mode === 'swap-duel')         return roundIndex === 0 ? { 1: 'keyboard', 2: 'voice' } : { 1: 'voice', 2: 'keyboard' };
   if (mode === 'beat-the-keyboard') return roundIndex === 0 ? { 1: 'keyboard' } : { 1: 'voice' };
+  if (mode === 'solo-output')       return { 1: 'keyboard' };
   return { 1: 'keyboard', 2: 'keyboard' };
 }
 
@@ -84,7 +86,7 @@ const stations = new Map([
 ]);
 
 let session = null;
-let timers = [];
+let timers  = [];
 
 function uid()   { return crypto.randomUUID().slice(0, 8); }
 function later(fn, ms) { const t = setTimeout(fn, ms); timers.push(t); return t; }
@@ -125,7 +127,65 @@ function serializeSession() {
   };
 }
 
-// ─── Scoring ───────────────────────────────────────────────────────────────────
+// ─── Prompts ───────────────────────────────────────────────────────────────────
+function pickPrompt(mode) {
+  const cat = mode === 'hinglish-hustle' ? 'hinglish' : mode === 'prompt-royale' ? 'royale' : null;
+  let pool = cat ? promptsDb.filter(p => p.category === cat)
+                 : promptsDb.filter(p => p.category !== 'hinglish' && p.category !== 'royale' && p.category !== 'one_liner');
+  if (!pool.length) pool = promptsDb;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+// Pick a queue of one-liner prompts for the multi-line race
+function pickLineQueue(mode, count = 20) {
+  let pool;
+  if (mode === 'hinglish-hustle') {
+    pool = promptsDb.filter(p => p.category === 'hinglish' || p.category === 'one_liner');
+  } else {
+    pool = promptsDb.filter(p => p.category === 'one_liner');
+  }
+  // Fill up if not enough one-liners
+  if (pool.length < count) {
+    const extra = promptsDb.filter(p =>
+      !['hinglish','royale','one_liner'].includes(p.category) &&
+      p.text.length < 90 &&
+      !pool.some(q => q.id === p.id)
+    );
+    pool = [...pool, ...extra];
+  }
+  if (!pool.length) pool = promptsDb;
+  // Shuffle and return count items
+  return [...pool].sort(() => Math.random() - 0.5).slice(0, Math.min(count, pool.length));
+}
+
+// ─── Scoring helpers ───────────────────────────────────────────────────────────
+function countWords(text) {
+  return (text || '').trim().split(/\s+/).filter(Boolean).length;
+}
+
+// Count how many words the typed input matches (partial credit at end of round)
+function countPartialWords(targetText, typedText, inputMode) {
+  if (!typedText || typedText.length < 2) return 0;
+  if (inputMode !== 'voice') {
+    // Keyboard: count correctly typed characters / 5
+    const target = targetText || '';
+    let correct = 0;
+    for (let i = 0; i < Math.min(typedText.length, target.length); i++) {
+      if (typedText[i] === target[i]) correct++;
+    }
+    return Math.floor(correct / 5);
+  }
+  // Voice: count normalized word matches from start
+  const targetWords = (targetText || '').toLowerCase().replace(/[.,!?;:'"—–]/g, '').split(/\s+/).filter(Boolean);
+  const typedWords  = (typedText  || '').toLowerCase().replace(/[.,!?;:'"—–]/g, '').split(/\s+/).filter(Boolean);
+  let count = 0;
+  for (let i = 0; i < Math.min(typedWords.length, targetWords.length); i++) {
+    if (typedWords[i] === targetWords[i]) count++;
+  }
+  return count;
+}
+
+// ─── Legacy scoring (single-prompt modes) ─────────────────────────────────────
 function normalizeText(text, inputMode) {
   let t = text.replace(/\s+/g, ' ').trim();
   if (inputMode === 'voice' || inputMode === 'hinglish') {
@@ -145,11 +205,11 @@ function evaluateInput(targetText, currentText, elapsedMs, inputMode) {
     if (target[i] === current[i]) correctChars++;
   }
 
-  const rawWpm    = Math.round((current.length / 5) / mins);
+  const rawWpm     = Math.round((current.length / 5) / mins);
   const correctWpm = Math.round((correctChars / 5) / mins);
-  const accuracy  = current.length > 0 ? correctChars / Math.max(target.length, current.length) : 0;
-  const usableWpm = Math.round(correctWpm * accuracy);
-  const progress  = target.length > 0 ? Math.min(1, current.length / target.length) : 0;
+  const accuracy   = current.length > 0 ? correctChars / Math.max(target.length, current.length) : 0;
+  const usableWpm  = Math.round(correctWpm * accuracy);
+  const progress   = target.length > 0 ? Math.min(1, current.length / target.length) : 0;
   const isComplete = inputMode === 'voice'
     ? (current.length >= target.length * 0.85 && accuracy > 0.75)
     : (current === target);
@@ -163,25 +223,16 @@ function calcFlowScore(usableWpm, accuracy, completed, corrections) {
   return Math.max(0, Math.round((usableWpm * 1.2) + completionBonus - correctionPenalty));
 }
 
-function assignBadges(keyboardWpm, voiceWpm, accuracy, corrections, inputMode) {
+function assignBadges(keyboardWords, voiceWords, accuracy, corrections, inputMode) {
   const badges = [];
-  const voiceAdv = keyboardWpm > 0 && voiceWpm > 0 ? voiceWpm / keyboardWpm : null;
+  const voiceAdv = keyboardWords > 0 && voiceWords > 0 ? voiceWords / keyboardWords : null;
   if (voiceAdv !== null && voiceAdv >= 2) badges.push('keyboard_slayer');
-  if (accuracy >= 0.95) badges.push('flow_state');
-  if (inputMode === 'voice' || voiceWpm > 0) badges.push('no_hands');
-  if (Math.max(keyboardWpm, voiceWpm) >= 120) badges.push('speed_demon');
+  if (accuracy >= 0.95)                   badges.push('flow_state');
+  if (inputMode === 'voice' || voiceWords > 0) badges.push('no_hands');
+  if (Math.max(keyboardWords, voiceWords) >= 100) badges.push('speed_demon');
   if (corrections <= 1 && inputMode === 'keyboard') badges.push('clean_talker');
-  if (voiceAdv !== null && voiceAdv < 1 && keyboardWpm > 0) badges.push('keyboard_survivor');
+  if (voiceAdv !== null && voiceAdv < 1 && keyboardWords > 0) badges.push('keyboard_survivor');
   return badges;
-}
-
-// ─── Prompts ───────────────────────────────────────────────────────────────────
-function pickPrompt(mode) {
-  const cat = mode === 'hinglish-hustle' ? 'hinglish' : mode === 'prompt-royale' ? 'royale' : null;
-  let pool = cat ? promptsDb.filter(p => p.category === cat)
-                 : promptsDb.filter(p => p.category !== 'hinglish' && p.category !== 'royale');
-  if (!pool.length) pool = promptsDb;
-  return pool[Math.floor(Math.random() * pool.length)];
 }
 
 // ─── Leaderboard ───────────────────────────────────────────────────────────────
@@ -198,6 +249,7 @@ function createSession(mode) {
     id: uid(), mode, state: 'name-entry',
     players: {}, rounds: [], currentRoundIndex: 0,
     winner: null, playerScores: null, pendingAssignments: null,
+    stationState: {},
   };
   stations.forEach((s, id) => stations.set(id, { ...s, player: null, ready: false }));
   broadcastState();
@@ -209,18 +261,42 @@ function checkBothReady() {
   if (needed.every(id => stations.get(id)?.ready)) startCountdown();
 }
 
+function isMultiLineMode(mode) {
+  return mode !== 'prompt-royale';
+}
+
 function startCountdown() {
   const idx         = session.currentRoundIndex;
   const assignments = getRoundAssignments(session.mode, idx);
-  const prompt      = pickPrompt(session.mode);
+  const multiLine   = isMultiLineMode(session.mode);
 
-  session.rounds[idx] = {
-    id: uid(), index: idx,
-    promptId: prompt.id, targetText: prompt.text, promptCategory: prompt.category,
-    inputAssignments: assignments,
-    durationSeconds: config.roundSeconds,
-    startedAt: null, endedAt: null, stationResults: {},
-  };
+  let roundData;
+  if (multiLine) {
+    const lineQueue = pickLineQueue(session.mode);
+    roundData = {
+      id: uid(), index: idx,
+      promptId: lineQueue[0]?.id || '',
+      targetText: lineQueue[0]?.text || '',
+      promptCategory: 'one_liner',
+      lineQueue,
+      isMultiLine: true,
+      inputAssignments: assignments,
+      durationSeconds: config.roundSeconds,
+      startedAt: null, endedAt: null, stationResults: {},
+    };
+  } else {
+    const prompt = pickPrompt(session.mode);
+    roundData = {
+      id: uid(), index: idx,
+      promptId: prompt.id, targetText: prompt.text, promptCategory: prompt.category,
+      isMultiLine: false,
+      inputAssignments: assignments,
+      durationSeconds: config.roundSeconds,
+      startedAt: null, endedAt: null, stationResults: {},
+    };
+  }
+
+  session.rounds[idx] = roundData;
   session.state = 'countdown';
   broadcastState();
 
@@ -243,11 +319,20 @@ function startRound() {
   const round = session.rounds[session.currentRoundIndex];
   round.startedAt = Date.now();
   session.state = 'racing';
+
+  // Init per-station state for multi-line mode
+  if (round.isMultiLine) {
+    session.stationState = {};
+    Object.keys(round.inputAssignments).forEach(id => {
+      session.stationState[id] = { lineIdx: 0, completedWords: 0, lastValue: '' };
+    });
+  }
+
   broadcastState();
   later(() => forceEndRound(), round.durationSeconds * 1000 + 500);
 }
 
-function handleRoundInput(stationId, value, elapsedMs, corrections) {
+function handleRoundInputSingle(stationId, value, elapsedMs, corrections) {
   if (session?.state !== 'racing') return;
   const round = session.rounds[session.currentRoundIndex];
   if (!round) return;
@@ -255,14 +340,15 @@ function handleRoundInput(stationId, value, elapsedMs, corrections) {
   const stats = evaluateInput(round.targetText, value, elapsedMs, inputMode);
 
   const otherId = stationId === 1 ? 2 : 1;
-  sendToStation(otherId, { type: 'opponent:update', stationId, progress: stats.progress, rawWpm: stats.rawWpm, usableWpm: stats.usableWpm });
+  sendToStation(otherId, { type: 'opponent:update', stationId, progress: stats.progress, usableWpm: stats.usableWpm });
   broadcast({ type: 'live:update', stationId, name: session.players[stationId]?.name, progress: stats.progress, usableWpm: stats.usableWpm });
 }
 
 function submitRoundResult(stationId, value, elapsedMs, corrections, backspaces) {
+  // Only used for single-prompt (prompt-royale) mode
   if (session?.state !== 'racing') return;
   const round = session.rounds[session.currentRoundIndex];
-  if (!round || round.stationResults[stationId]) return; // guard double-submit
+  if (!round || round.isMultiLine || round.stationResults[stationId]) return;
 
   const player    = session.players[stationId];
   const inputMode = round.inputAssignments[stationId] || 'keyboard';
@@ -272,6 +358,7 @@ function submitRoundResult(stationId, value, elapsedMs, corrections, backspaces)
   round.stationResults[stationId] = {
     stationId: String(stationId), playerId: player?.id, playerName: player?.name,
     inputMode, rawText: value,
+    completedWords: 0,
     rawWpm: stats.rawWpm, usableWpm: stats.usableWpm, accuracy: stats.accuracy,
     corrections, backspaces, completed: stats.isComplete,
     completionTimeMs: elapsedMs, flowScore, badgeIds: [],
@@ -291,13 +378,38 @@ function forceEndRound() {
   if (session?.state !== 'racing') return;
   const round = session.rounds[session.currentRoundIndex];
   if (!round) return;
+
+  const durationMs = round.durationSeconds * 1000;
+  const mins       = round.durationSeconds / 60;
+
   Object.keys(round.inputAssignments).map(Number).forEach(id => {
-    if (!round.stationResults[id]) {
+    if (round.stationResults[id]) return;
+
+    if (round.isMultiLine) {
+      const ss = session.stationState?.[id] || { lineIdx: 0, completedWords: 0, lastValue: '' };
+      const inputMode    = round.inputAssignments[id];
+      const currentLine  = round.lineQueue?.[ss.lineIdx]?.text || '';
+      const partialWords = countPartialWords(currentLine, ss.lastValue, inputMode);
+      const totalWords   = ss.completedWords + partialWords;
+      const usableWpm    = Math.round(totalWords / Math.max(mins, 0.01));
+      const flowScore    = totalWords * 10;
+
+      round.stationResults[id] = {
+        stationId: String(id), playerId: session.players[id]?.id, playerName: session.players[id]?.name,
+        inputMode, rawText: ss.lastValue,
+        completedWords: totalWords,
+        rawWpm: usableWpm, usableWpm, accuracy: 1.0,
+        corrections: 0, backspaces: 0,
+        completed: false, completionTimeMs: durationMs,
+        flowScore, badgeIds: [],
+      };
+    } else {
       round.stationResults[id] = {
         stationId: String(id), playerId: session.players[id]?.id, playerName: session.players[id]?.name,
         inputMode: round.inputAssignments[id], rawText: '',
+        completedWords: 0,
         rawWpm: 0, usableWpm: 0, accuracy: 0, corrections: 0, backspaces: 0,
-        completed: false, completionTimeMs: round.durationSeconds * 1000, flowScore: 0, badgeIds: [],
+        completed: false, completionTimeMs: durationMs, flowScore: 0, badgeIds: [],
       };
     }
   });
@@ -329,23 +441,39 @@ function endSession() {
   const playerScores = {};
 
   for (const [sid, player] of Object.entries(session.players)) {
-    let totalFlow = 0, keyboardWpm = 0, voiceWpm = 0;
+    let totalFlow = 0, keyboardWords = 0, voiceWords = 0;
     session.rounds.forEach(round => {
       const r = round.stationResults[parseInt(sid)];
       if (!r) return;
       totalFlow += r.flowScore;
-      if (r.inputMode === 'keyboard') keyboardWpm = r.usableWpm;
-      if (r.inputMode === 'voice')    voiceWpm    = r.usableWpm;
+      if (round.isMultiLine) {
+        if (r.inputMode === 'keyboard') keyboardWords = r.completedWords || 0;
+        if (r.inputMode === 'voice')    voiceWords    = r.completedWords || 0;
+      } else {
+        if (r.inputMode === 'keyboard') keyboardWords = r.usableWpm;
+        if (r.inputMode === 'voice')    voiceWords    = r.usableWpm;
+      }
     });
-    const voiceAdvantage = keyboardWpm > 0 && voiceWpm > 0
-      ? Math.round((voiceWpm / keyboardWpm) * 10) / 10 : null;
-    const badges = assignBadges(keyboardWpm, voiceWpm, 1, 0, voiceWpm > 0 ? 'voice' : 'keyboard');
-    playerScores[sid] = { totalFlow, keyboardWpm, voiceWpm, voiceAdvantage, badges };
+
+    const voiceMultiplier = keyboardWords > 0 && voiceWords > 0
+      ? Math.round((voiceWords / keyboardWords) * 10) / 10 : null;
+    const extraWords = voiceWords > keyboardWords ? voiceWords - keyboardWords : 0;
+    const badges = assignBadges(keyboardWords, voiceWords, 1.0, 0, voiceWords > 0 ? 'voice' : 'keyboard');
+
+    playerScores[sid] = {
+      totalFlow,
+      keyboardWpm: keyboardWords,   // kept for compat
+      voiceWpm: voiceWords,         // kept for compat
+      keyboardWords, voiceWords, extraWords, voiceMultiplier,
+      badges,
+    };
 
     leaderboard.push({
       id: uid(), eventId: config.eventId, playerName: player.name, company: player.company || '',
-      mode: session.mode, flowScore: totalFlow, usableWpm: Math.max(keyboardWpm, voiceWpm),
-      voiceAdvantage, badgeIds: badges, bucket: session.mode, createdAt: Date.now(),
+      mode: session.mode, flowScore: totalFlow,
+      usableWpm: Math.max(keyboardWords, voiceWords),
+      voiceAdvantage: voiceMultiplier, badgeIds: badges,
+      bucket: session.mode, createdAt: Date.now(),
     });
     saveJson('leaderboard.json', leaderboard);
 
@@ -357,12 +485,15 @@ function endSession() {
         mode: session.mode, playerName: player.name, company: player.company || '',
         inputMode: r.inputMode, promptId: round.promptId,
         rawWpm: r.rawWpm, usableWpm: r.usableWpm, accuracy: r.accuracy,
-        flowScore: r.flowScore, voiceAdvantage, badgeIds: r.badgeIds, completed: r.completed,
+        flowScore: r.flowScore, voiceAdvantage: voiceMultiplier,
+        badgeIds: r.badgeIds, completed: r.completed,
+        completedWords: r.completedWords || 0,
       });
     });
     saveJson('runs.json', runs);
   }
 
+  // Determine winner
   const scores = Object.entries(playerScores).map(([sid, s]) => ({ sid: parseInt(sid), score: s.totalFlow }));
   if (scores.length === 1) {
     session.winner = { type: 'solo', stationId: scores[0].sid, name: session.players[scores[0].sid]?.name };
@@ -399,6 +530,7 @@ wss.on('connection', (ws) => {
     let msg; try { msg = JSON.parse(raw); } catch { return; }
 
     switch (msg.type) {
+
       case 'station:join': {
         const id = parseInt(msg.stationId);
         if (id === 1 || id === 2) {
@@ -409,10 +541,12 @@ wss.on('connection', (ws) => {
         sendTo(ws, { type: 'names', names });
         break;
       }
+
       case 'mode:select': {
         if (!session) createSession(msg.mode || config.defaultMode);
         break;
       }
+
       case 'player:select': {
         if (!session) break;
         const sid = parseInt(msg.stationId) || myStation;
@@ -421,6 +555,7 @@ wss.on('connection', (ws) => {
         broadcastState();
         break;
       }
+
       case 'player:ready': {
         if (!session) break;
         const sid = parseInt(msg.stationId) || myStation;
@@ -431,26 +566,74 @@ wss.on('connection', (ws) => {
         checkBothReady();
         break;
       }
+
       case 'input:update': {
         if (!session || session.state !== 'racing') break;
-        const sid = parseInt(msg.stationId) || myStation;
+        const sid   = parseInt(msg.stationId) || myStation;
         const round = session.rounds[session.currentRoundIndex];
         if (!round || !sid) break;
-        handleRoundInput(sid, msg.value || '', round.startedAt ? Date.now() - round.startedAt : 0, msg.corrections || 0);
+
+        if (round.isMultiLine) {
+          // Store lastValue for partial scoring at round-end
+          const ss = session.stationState?.[sid];
+          if (ss) ss.lastValue = msg.value || '';
+
+          // Compute live word count (completed + partial) for leaderboard display
+          const elapsed      = Date.now() - (round.startedAt || Date.now());
+          const inputMode    = round.inputAssignments[sid];
+          const currentLine  = round.lineQueue?.[ss?.lineIdx || 0]?.text || '';
+          const partial      = countPartialWords(currentLine, msg.value || '', inputMode);
+          const totalWords   = (ss?.completedWords || 0) + partial;
+          const mins         = Math.max(elapsed / 60000, 0.001);
+          broadcast({ type: 'live:update', stationId: sid, name: session.players[sid]?.name, usableWpm: Math.round(totalWords / mins) });
+          const otherId = sid === 1 ? 2 : 1;
+          sendToStation(otherId, { type: 'opponent:update', stationId: sid, wordCount: totalWords });
+        } else {
+          handleRoundInputSingle(sid, msg.value || '', round.startedAt ? Date.now() - round.startedAt : 0, msg.corrections || 0);
+        }
         break;
       }
-      case 'round:finish': {
+
+      case 'line:complete': {
+        // Client reports a line was fully completed in multi-line mode
         if (!session || session.state !== 'racing') break;
-        const sid = parseInt(msg.stationId) || myStation;
+        const sid   = parseInt(msg.stationId) || myStation;
         const round = session.rounds[session.currentRoundIndex];
-        if (!round || !sid) break;
+        if (!round?.isMultiLine || !sid) break;
+        const ss = session.stationState?.[sid];
+        if (!ss) break;
+        // Desync guard: only accept if lineIdx matches
+        if (msg.lineIdx !== ss.lineIdx) break;
+
+        const lineText   = round.lineQueue[ss.lineIdx]?.text || '';
+        const wordCount  = countWords(lineText);
+        ss.completedWords += wordCount;
+        ss.lineIdx++;
+        ss.lastValue = '';
+
+        const elapsed    = Date.now() - (round.startedAt || Date.now());
+        const mins       = Math.max(elapsed / 60000, 0.001);
+        broadcast({ type: 'live:update', stationId: sid, name: session.players[sid]?.name, usableWpm: Math.round(ss.completedWords / mins) });
+        const otherId = sid === 1 ? 2 : 1;
+        sendToStation(otherId, { type: 'opponent:update', stationId: sid, wordCount: ss.completedWords });
+        break;
+      }
+
+      case 'round:finish': {
+        // Only used for single-prompt (prompt-royale) mode
+        if (!session || session.state !== 'racing') break;
+        const sid   = parseInt(msg.stationId) || myStation;
+        const round = session.rounds[session.currentRoundIndex];
+        if (!round || round.isMultiLine || !sid) break;
         submitRoundResult(sid, msg.value || '', round.startedAt ? Date.now() - round.startedAt : 0, msg.corrections || 0, msg.backspaces || 0);
         break;
       }
+
       case 'admin:reset': {
         doReset();
         break;
       }
+
       case 'admin:mode': {
         doReset();
         later(() => createSession(msg.mode || config.defaultMode), 100);
@@ -503,12 +686,12 @@ app.get('/api/prompts/reload', (_req, res) => {
 });
 
 app.get('/api/export/runs.csv', (_req, res) => {
-  const cols = ['timestamp','event_id','event_name','mode','player_name','company','input_mode','prompt_id','raw_wpm','usable_wpm','accuracy','flow_score','voice_advantage','badges','completed'];
+  const cols = ['timestamp','event_id','event_name','mode','player_name','company','input_mode','prompt_id','raw_wpm','usable_wpm','accuracy','flow_score','completed_words','voice_advantage','badges','completed'];
   const rows = runs.map(r => [
     new Date(r.timestamp).toISOString(), r.eventId, config.eventName,
     r.mode, r.playerName, r.company, r.inputMode, r.promptId,
     r.rawWpm, r.usableWpm, Math.round((r.accuracy || 0) * 100) + '%',
-    r.flowScore, r.voiceAdvantage ?? '', (r.badgeIds || []).join('|'), r.completed ? 'yes' : 'no',
+    r.flowScore, r.completedWords || 0, r.voiceAdvantage ?? '', (r.badgeIds || []).join('|'), r.completed ? 'yes' : 'no',
   ].map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','));
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename="flow-fight-runs-${Date.now()}.csv"`);
@@ -516,7 +699,7 @@ app.get('/api/export/runs.csv', (_req, res) => {
 });
 
 app.get('/api/export/leaderboard.csv', (_req, res) => {
-  const cols = ['rank','player_name','company','mode','flow_score','usable_wpm','voice_advantage','badges'];
+  const cols = ['rank','player_name','company','mode','flow_score','words','voice_advantage','badges'];
   const sorted = [...leaderboard].sort((a, b) => b.flowScore - a.flowScore);
   const rows = sorted.map((e, i) => [
     i + 1, e.playerName, e.company || '', e.mode, e.flowScore,

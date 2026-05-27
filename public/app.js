@@ -8,24 +8,25 @@ const STATION_ID = _pathMatch
 
 // ─── Mode config (mirrors server) ─────────────────────────────────────────────
 const MODES_META = {
-  'keyboard-race':     { label: 'Keyboard Race',     tagline: 'Classic WPM race.', icon: '⌨️',  playerCount: 2, rounds: 1 },
-  'voice-vs-keyboard': { label: 'Voice vs Keyboard', tagline: 'One talks. One types.', icon: '🎙️', playerCount: 2, rounds: 1 },
-  'swap-duel':         { label: 'Swap Duel',          tagline: 'Both do both. Fairest battle.', icon: '🔄', playerCount: 2, rounds: 2 },
-  'beat-the-keyboard': { label: 'Beat the Keyboard',  tagline: 'Solo challenge.', icon: '🥊',    playerCount: 1, rounds: 2 },
-  'hinglish-hustle':   { label: 'Hinglish Hustle',    tagline: 'Mix it up.', icon: '🇮🇳',         playerCount: 2, rounds: 1 },
-  'prompt-royale':     { label: 'Prompt Royale',      tagline: 'Real-world writing.', icon: '✍️', playerCount: 2, rounds: 1 },
+  'keyboard-race':     { label: 'Keyboard Race',        tagline: 'Classic WPM race.', icon: '⌨️',  playerCount: 2, rounds: 1 },
+  'voice-vs-keyboard': { label: 'Voice vs Keyboard',    tagline: 'One talks. One types.', icon: '🎙️', playerCount: 2, rounds: 1 },
+  'swap-duel':         { label: 'Swap Duel',             tagline: 'Both do both. Fairest battle.', icon: '🔄', playerCount: 2, rounds: 2 },
+  'beat-the-keyboard': { label: 'Beat the Keyboard',     tagline: 'Solo: type then speak.', icon: '🥊', playerCount: 1, rounds: 2 },
+  'solo-output':       { label: 'Solo Output Challenge', tagline: '60s — how many words?', icon: '⚡', playerCount: 1, rounds: 1 },
+  'hinglish-hustle':   { label: 'Hinglish Hustle',       tagline: 'Mix it up.', icon: '🇮🇳',         playerCount: 2, rounds: 1 },
+  'prompt-royale':     { label: 'Prompt Royale',         tagline: 'Real-world writing.', icon: '✍️', playerCount: 2, rounds: 1 },
 };
 
 const BADGE_META = {
-  keyboard_slayer:  { label: 'Keyboard Slayer',    emoji: '⚔️' },
-  flow_state:       { label: 'Flow State',          emoji: '🌊' },
-  no_hands:         { label: 'No Hands Needed',     emoji: '🎙️' },
-  speed_demon:      { label: 'Speed Demon',         emoji: '⚡' },
-  clean_talker:     { label: 'Clean Talker',        emoji: '✨' },
-  keyboard_survivor:{ label: 'Keyboard Survivor',   emoji: '🛡️' },
+  keyboard_slayer:   { label: 'Keyboard Slayer',  emoji: '⚔️' },
+  flow_state:        { label: 'Flow State',        emoji: '🌊' },
+  no_hands:          { label: 'No Hands Needed',   emoji: '🎙️' },
+  speed_demon:       { label: 'Speed Demon',        emoji: '⚡' },
+  clean_talker:      { label: 'Clean Talker',       emoji: '✨' },
+  keyboard_survivor: { label: 'Keyboard Survivor',  emoji: '🛡️' },
 };
 
-// ─── State ─────────────────────────────────────────────────────────────────────
+// ─── Global state ──────────────────────────────────────────────────────────────
 let ws            = null;
 let serverSession = null;
 let serverConfig  = null;
@@ -36,18 +37,30 @@ let playerCompany = '';
 let recognition   = null;
 
 // Race state
-let currentPrompt  = '';
-let currentMode    = '';    // 'keyboard' | 'voice'
-let typedText      = '';
-let raceStartTime  = null;
-let corrections    = 0;
-let backspaces     = 0;
-let wpmTimer       = null;
-let clockTimer     = null;
-let rtTimer        = null;
-let nextRaceTimer  = null;
-let roundEndSent   = false;
+let currentPrompt   = '';
+let currentMode     = '';    // 'keyboard' | 'voice'
+let typedText       = '';
+let raceStartTime   = null;
+let corrections     = 0;
+let backspaces      = 0;
+let roundEndSent    = false;
 let lastRoundResult = null;
+
+// Multi-line race state
+let lineQueue           = [];    // [{id, text, category}]
+let currentLineIndex    = 0;
+let completedWords      = 0;
+let completedLinesList  = [];    // [{text, wordCount}]
+let roundEndTime        = null;  // absolute timestamp when round ends
+let roundDurationSecs   = 60;
+let oppWordCount        = 0;
+let isMultiLineRound    = false;
+
+// Timers
+let wpmTimer      = null;
+let clockTimer    = null;
+let rtTimer       = null;
+let nextRaceTimer = null;
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
@@ -102,7 +115,7 @@ function handleMsg(msg) {
       break;
 
     case 'opponent:update':
-      onOpponentUpdate(msg.progress, msg.usableWpm);
+      onOpponentUpdate(msg.progress, msg.usableWpm, msg.wordCount);
       break;
 
     case 'round:results':
@@ -110,7 +123,6 @@ function handleMsg(msg) {
       break;
 
     case 'session:results':
-      // Fetch fresh leaderboard and push into the results screen if it's showing
       fetch('/api/leaderboard')
         .then(r => r.json())
         .then(entries => renderLeaderboard(entries, 'result-leaderboard'))
@@ -125,7 +137,6 @@ function handleMsg(msg) {
 
 // ─── Screen routing ────────────────────────────────────────────────────────────
 function onStateChange() {
-  // If server just created a session, exit local mode-select
   if (serverSession && clientState === 'mode-select') clientState = null;
   const screen = deriveScreen();
   renderScreen(screen);
@@ -145,13 +156,13 @@ function deriveScreen() {
   if (meta?.playerCount === 1 && STATION_ID === 2 && state === 'racing') return 'spectator';
 
   switch (state) {
-    case 'name-entry':     return me?.isReady ? 'waiting' : 'name-entry';
-    case 'countdown':      return 'countdown';
-    case 'racing':         return me ? 'racing' : 'spectator';
+    case 'name-entry':      return me?.isReady ? 'waiting' : 'name-entry';
+    case 'countdown':       return 'countdown';
+    case 'racing':          return me ? 'racing' : 'spectator';
     case 'round-transition': return me ? 'round-transition' : 'spectator';
-    case 'results':        return 'results';
-    case 'cta':            return 'cta';
-    default:               return 'idle';
+    case 'results':         return 'results';
+    case 'cta':             return 'cta';
+    default:                return 'idle';
   }
 }
 
@@ -164,35 +175,23 @@ function renderScreen(name) {
 // ─── Screen population ─────────────────────────────────────────────────────────
 function populateScreen(screen) {
   switch (screen) {
-    case 'idle':        populateIdle(); break;
-    case 'name-entry':  populateNameEntry(); break;
-    case 'waiting':     populateWaiting(); break;
-    case 'countdown':   populateCountdown(); break;
-    case 'racing':      populateRacing(); break;
+    case 'idle':             populateIdle(); break;
+    case 'name-entry':       populateNameEntry(); break;
+    case 'waiting':          populateWaiting(); break;
+    case 'countdown':        populateCountdown(); break;
+    case 'racing':           populateRacing(); break;
     case 'round-transition': populateRoundTransition(); break;
-    case 'results':     populateResults(); break;
-    case 'cta':         populateCta(); break;
+    case 'results':          populateResults(); break;
+    case 'cta':              populateCta(); break;
   }
 }
 
 // ─── IDLE ──────────────────────────────────────────────────────────────────────
 function populateIdle() {
-  // Fetch top leaderboard entries via REST
   fetch('/api/leaderboard')
     .then(r => r.json())
     .then(entries => renderLeaderboard(entries, 'idle-leaderboard'))
     .catch(() => renderLeaderboard([], 'idle-leaderboard'));
-}
-
-function listenForAnyKey() {
-  function onKey(e) {
-    if (e.ctrlKey || e.metaKey || e.key === 'Escape') return;
-    if (deriveScreen() !== 'idle') { document.removeEventListener('keydown', onKey); return; }
-    document.removeEventListener('keydown', onKey);
-    clientState = 'mode-select';
-    renderScreen('mode-select');
-  }
-  document.addEventListener('keydown', onKey);
 }
 
 // ─── MODE SELECT ───────────────────────────────────────────────────────────────
@@ -235,7 +234,6 @@ function onNameSearch(query) {
   const q = query.toLowerCase().trim();
   const filtered = q ? names.filter(n => n.toLowerCase().includes(q)) : names;
   renderNameList(filtered);
-  // Show ad hoc button if query has 2+ chars and no exact match
   const adhoc = el('adhoc-section');
   const preview = el('adhoc-name-preview');
   if (q.length >= 2 && !names.some(n => n.toLowerCase() === q)) {
@@ -355,8 +353,8 @@ function populateWaiting() {
   el('waiting-your-name').textContent = playerName || players[STATION_ID]?.name || 'YOU';
   el('waiting-mode-label').textContent = meta ? `${meta.icon} ${meta.label}` : '';
 
-  const otherId  = STATION_ID === 1 ? 2 : 1;
-  const otherP   = players[otherId];
+  const otherId = STATION_ID === 1 ? 2 : 1;
+  const otherP  = players[otherId];
   if (otherP) {
     el('waiting-opp-name').textContent = otherP.name;
     el('waiting-opp-name').style.display = '';
@@ -379,24 +377,19 @@ function populateCountdown() {
 
   el('countdown-mode-label').textContent = meta ? `${meta.icon} ${meta.label} — Round ${(s.currentRoundIndex || 0) + 1}` : '';
 
-  // Player names
   const p1name = s.players?.[1]?.name || 'Station 1';
-  const p2name = mode === 'beat-the-keyboard' ? '—' : (s.players?.[2]?.name || 'Station 2');
+  const p2name = mode === 'beat-the-keyboard' || mode === 'solo-output' ? '—' : (s.players?.[2]?.name || 'Station 2');
   el('countdown-p1-name').textContent = p1name;
   el('countdown-p2-name').textContent = p2name;
 
-  // Input hint
   el('countdown-input-hint').textContent = myMode === 'voice'
     ? '🎙️ Get ready to speak'
     : '⌨️ Get ready to type';
 
-  // Prompt preview
-  if (round?.targetText) {
-    if (mode === 'prompt-royale') {
-      el('countdown-prompt').textContent = '📝 ' + round.targetText;
-    } else {
-      el('countdown-prompt').textContent = round.targetText;
-    }
+  if (round?.isMultiLine) {
+    el('countdown-prompt').textContent = `${round.lineQueue?.length || 20} one-line sentences · ${round.durationSeconds || 60}s`;
+  } else if (round?.targetText) {
+    el('countdown-prompt').textContent = round.targetText;
   }
 }
 
@@ -415,11 +408,9 @@ function onCountdownTick(count) {
 function populateRacing() {
   const s = serverSession;
   if (!s) return;
-
   const round = s.currentRound;
   if (!round) return;
 
-  currentPrompt = round.targetText || '';
   currentMode   = round.inputAssignments?.[STATION_ID] || 'keyboard';
   typedText     = '';
   corrections   = 0;
@@ -427,35 +418,74 @@ function populateRacing() {
   roundEndSent  = false;
   raceStartTime = round.startedAt || Date.now();
 
-  // Names
+  isMultiLineRound = !!(round.isMultiLine && round.lineQueue?.length);
+
+  if (isMultiLineRound) {
+    lineQueue           = round.lineQueue;
+    currentLineIndex    = 0;
+    completedWords      = 0;
+    completedLinesList  = [];
+    currentPrompt       = lineQueue[0]?.text || '';
+    roundDurationSecs   = round.durationSeconds || 60;
+    roundEndTime        = raceStartTime + roundDurationSecs * 1000;
+    oppWordCount        = 0;
+  } else {
+    lineQueue    = [];
+    currentPrompt = round.targetText || '';
+    roundEndTime  = null;
+  }
+
+  // Names / labels
   const otherId = STATION_ID === 1 ? 2 : 1;
-  el('your-name-display').textContent = s.players?.[STATION_ID]?.name || `Station ${STATION_ID}`;
-  el('opp-name-display').textContent  = s.players?.[otherId]?.name || (s.mode === 'beat-the-keyboard' ? '—' : `Station ${otherId}`);
-  el('race-mode-badge').textContent   = MODES_META[s.mode]?.label || s.mode;
+  el('your-name-display').textContent  = s.players?.[STATION_ID]?.name || `Station ${STATION_ID}`;
+  el('opp-name-display').textContent   = s.players?.[otherId]?.name || (s.mode === 'beat-the-keyboard' || s.mode === 'solo-output' ? '—' : `Station ${otherId}`);
+  el('race-mode-badge').textContent    = MODES_META[s.mode]?.label || s.mode;
   el('race-station-label').textContent = `STATION ${STATION_ID} · ${currentMode.toUpperCase()}`;
 
-  // Reset progress
-  el('your-wpm').textContent = '0';
-  el('opp-wpm').textContent  = '0';
+  // Score bar
+  el('your-words').textContent = '0';
+  el('opp-words').textContent  = '0';
   el('your-progress-bar').style.width = '0%';
   el('opp-progress-bar').style.width  = '0%';
-  el('your-progress-pct').textContent = '0%';
-  el('opp-progress-pct').textContent  = '0%';
-  el('finish-message').style.display  = 'none';
 
+  // Role label
   if (currentMode === 'voice') {
-    el('keyboard-area').style.display = 'none';
-    el('voice-area').style.display    = '';
-    el('voice-target-text').textContent = currentPrompt;
+    el('role-label').style.display = '';
+    el('role-label-text').textContent = '🎙️ VOICE MODE — Click the text box below, then dictate with Wispr Flow';
+  } else {
+    el('role-label').style.display = 'none';
+  }
+
+  // Completed lines feed
+  el('completed-lines-feed').innerHTML = '';
+
+  // Timer label
+  const timerEl = el('race-timer');
+  timerEl.classList.remove('timer-urgent');
+  if (isMultiLineRound) {
+    timerEl.textContent = formatCountdown(roundDurationSecs);
+  } else {
+    timerEl.textContent = '0:00';
+  }
+
+  // Line indicator
+  updateLineIndicator();
+
+  // Input mode setup
+  if (currentMode === 'voice') {
+    el('keyboard-area').style.display    = 'none';
+    el('voice-target-area').style.display = '';
+    el('voice-area').style.display       = '';
+    el('current-line-display').textContent = currentPrompt;
     const ta = el('voice-textarea');
     ta.value = '';
     setupVoiceInput(ta);
   } else {
-    el('voice-area').style.display    = 'none';
-    el('keyboard-area').style.display = '';
+    el('voice-target-area').style.display = 'none';
+    el('voice-area').style.display        = 'none';
+    el('keyboard-area').style.display     = '';
     renderTypingDisplay();
     document.addEventListener('keydown', onRaceKey);
-    el('voice-textarea').removeEventListener('input', onVoiceInput);
   }
 
   clearInterval(wpmTimer);
@@ -467,7 +497,6 @@ function populateRacing() {
 // ── Keyboard mode ──────────────────────────────────────────────────────────────
 function onRaceKey(e) {
   if (deriveScreen() !== 'racing' || currentMode !== 'keyboard') return;
-  if (el('finish-message').style.display !== 'none') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   e.preventDefault();
 
@@ -480,15 +509,15 @@ function onRaceKey(e) {
 
   renderTypingDisplay();
   sendInputUpdate();
-  checkComplete();
+  checkLineComplete();
 }
 
 function renderTypingDisplay() {
   const html = currentPrompt.split('').map((char, i) => {
     let cls;
-    if (i < typedText.length)    cls = typedText[i] === char ? 'correct' : 'wrong';
+    if (i < typedText.length)      cls = typedText[i] === char ? 'correct' : 'wrong';
     else if (i === typedText.length) cls = 'cursor';
-    else                         cls = 'upcoming';
+    else                            cls = 'upcoming';
     return `<span class="char ${cls}">${char === ' ' ? '&nbsp;' : esc(char)}</span>`;
   }).join('');
   el('typing-display').innerHTML = html;
@@ -499,86 +528,211 @@ function renderTypingDisplay() {
 function setupVoiceInput(ta) {
   ta.removeEventListener('input', onVoiceInput);
   ta.addEventListener('input', onVoiceInput);
-  setTimeout(() => ta.focus(), 200);
+  setTimeout(() => { ta.focus(); }, 200);
 }
 
 function onVoiceInput(e) {
-  if (roundEndSent) return;
+  if (deriveScreen() !== 'racing' || currentMode !== 'voice') return;
   const value = e.target.value;
   sendInputUpdate(value);
-  updateRaceStatsVoice(value);
-  // Auto-submit on apparent completion (server also force-ends via timer)
-  const target = normalizeForMatch(currentPrompt);
-  const current = normalizeForMatch(value);
-  if (current.length >= target.length * 0.9 && target.length > 0) {
-    submitRoundFinish(value);
+
+  if (isMultiLineRound) {
+    if (currentLineIndex >= lineQueue.length) return;
+    const target = lineQueue[currentLineIndex]?.text || '';
+    if (isVoiceLineComplete(target, value)) {
+      lineComplete('voice');
+    }
+  } else {
+    // Single-prompt voice mode (prompt-royale)
+    const target  = normalizeForMatch(currentPrompt);
+    const current = normalizeForMatch(value);
+    if (current.length >= target.length * 0.9 && target.length > 0) {
+      submitRoundFinish(value);
+    }
   }
+}
+
+function isVoiceLineComplete(targetText, spokenText) {
+  const targetWords = targetText.toLowerCase().replace(/[.,!?;:'"—–]/g, '').split(/\s+/).filter(Boolean);
+  const spokenWords = spokenText.toLowerCase().replace(/[.,!?;:'"—–]/g, '').split(/\s+/).filter(Boolean);
+  if (targetWords.length === 0) return false;
+
+  // Subsequence match: find target words appearing in order within spoken words
+  let matches = 0;
+  let spokenIdx = 0;
+  for (let t = 0; t < targetWords.length && spokenIdx < spokenWords.length; ) {
+    if (spokenWords[spokenIdx] === targetWords[t]) { matches++; t++; }
+    spokenIdx++;
+  }
+
+  const matchRatio = matches / targetWords.length;
+  return matchRatio >= 0.75 && spokenWords.length >= targetWords.length * 0.75;
 }
 
 function normalizeForMatch(t) {
   return t.toLowerCase().replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
 }
 
-// ── Shared stats ───────────────────────────────────────────────────────────────
+// ── Line completion (multi-line mode) ─────────────────────────────────────────
+function checkLineComplete() {
+  if (!isMultiLineRound) {
+    // Single-prompt keyboard: exact match submits round
+    if (typedText === currentPrompt) submitRoundFinish(typedText);
+    return;
+  }
+  const target = lineQueue[currentLineIndex]?.text || '';
+  if (typedText === target) lineComplete('keyboard');
+}
+
+function lineComplete(inputMode) {
+  const lineText  = lineQueue[currentLineIndex]?.text || '';
+  const wordCount = lineText.trim().split(/\s+/).filter(Boolean).length;
+
+  completedLinesList.push({ text: lineText, wordCount });
+  completedWords += wordCount;
+
+  // Tell server
+  send({ type: 'line:complete', stationId: STATION_ID, lineIdx: currentLineIndex, wordCount });
+
+  // Advance locally
+  currentLineIndex++;
+
+  if (currentLineIndex >= lineQueue.length) {
+    // All lines done
+    el('current-line-display').textContent = '🎉 All lines done! Timer keeps running…';
+    if (inputMode === 'keyboard') {
+      el('keyboard-area').style.display = 'none';
+    } else {
+      const ta = el('voice-textarea');
+      if (ta) { ta.value = ''; ta.disabled = true; }
+    }
+  } else {
+    currentPrompt = lineQueue[currentLineIndex].text;
+    typedText = '';
+
+    if (inputMode === 'keyboard') {
+      renderTypingDisplay();
+    } else {
+      const ta = el('voice-textarea');
+      if (ta) {
+        ta.value = '';
+        ta.focus(); // Keep focused for Wispr Flow
+      }
+      el('current-line-display').textContent = currentPrompt;
+    }
+  }
+
+  updateCompletedFeed();
+  updateLineIndicator();
+  el('your-words').textContent = completedWords;
+  updateProgressBar(completedWords, oppWordCount);
+}
+
+// ── Progress display helpers ───────────────────────────────────────────────────
+const MAX_WORDS_FILL = 80; // bar fills at 80 words
+
+function updateProgressBar(yourWords, oppWords) {
+  const yourPct = Math.min(100, ((yourWords || 0) / MAX_WORDS_FILL) * 100);
+  const oppPct  = Math.min(100, ((oppWords  || 0) / MAX_WORDS_FILL) * 100);
+  el('your-progress-bar').style.width = `${yourPct}%`;
+  el('opp-progress-bar').style.width  = `${oppPct}%`;
+}
+
+function updateCompletedFeed() {
+  const feed = el('completed-lines-feed');
+  if (!feed) return;
+  const recent = completedLinesList.slice(-4);
+  feed.innerHTML = recent.map(line =>
+    `<div class="completed-line">✓ ${esc(line.text)}</div>`
+  ).join('');
+}
+
+function updateLineIndicator() {
+  const ind = el('race-line-indicator');
+  if (!ind) return;
+  if (isMultiLineRound && lineQueue.length) {
+    const shown = Math.min(currentLineIndex + 1, lineQueue.length);
+    ind.textContent = `Line ${shown} / ${lineQueue.length}`;
+  } else {
+    ind.textContent = '';
+  }
+}
+
+// ── Clock ──────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const timerEl = el('race-timer');
+  if (!timerEl) return;
+
+  if (isMultiLineRound && roundEndTime) {
+    const remaining = Math.max(0, roundEndTime - Date.now());
+    const secs = Math.ceil(remaining / 1000);
+    timerEl.textContent = formatCountdown(secs);
+    if (secs <= 10) timerEl.classList.add('timer-urgent');
+    else timerEl.classList.remove('timer-urgent');
+  } else if (raceStartTime) {
+    const elapsed = Math.floor((Date.now() - raceStartTime) / 1000);
+    timerEl.textContent = `${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`;
+  }
+}
+
+function formatCountdown(secs) {
+  return `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+}
+
+// ── Live WPM stats interval ────────────────────────────────────────────────────
+function updateRaceStats() {
+  sendInputUpdate(); // keep server up to date
+
+  if (isMultiLineRound) {
+    el('your-words').textContent = completedWords;
+    updateProgressBar(completedWords, oppWordCount);
+  } else if (currentMode === 'keyboard') {
+    // Single-prompt WPM display (repurpose your-words for WPM)
+    const wpm = calcWpm(typedText);
+    const pct = currentPrompt.length > 0 ? typedText.length / currentPrompt.length : 0;
+    el('your-words').textContent = wpm;
+    el('your-progress-bar').style.width = `${Math.round(pct * 100)}%`;
+  }
+}
+
 function calcWpm(text) {
   if (!raceStartTime) return 0;
   const mins = (Date.now() - raceStartTime) / 60000;
   if (mins < 0.001) return 0;
-  const correct = [...text].filter((c, i) => c === currentPrompt[i]).length;
+  const correct = [...(text || '')].filter((c, i) => c === currentPrompt[i]).length;
   return Math.round((correct / 5) / mins);
 }
 
-function updateRaceStats() {
-  if (currentMode !== 'keyboard') return;
-  const wpm = calcWpm(typedText);
-  const pct = currentPrompt.length > 0 ? typedText.length / currentPrompt.length : 0;
-  el('your-wpm').textContent = wpm;
-  el('your-progress-bar').style.width = `${Math.round(pct * 100)}%`;
-  el('your-progress-pct').textContent = `${Math.round(pct * 100)}%`;
-}
-
-function updateRaceStatsVoice(value) {
-  const wpm = calcWpm(value);
-  const pct = currentPrompt.length > 0 ? value.length / currentPrompt.length : 0;
-  el('your-wpm').textContent = wpm;
-  el('your-progress-bar').style.width = `${Math.min(100, Math.round(pct * 100))}%`;
-  el('your-progress-pct').textContent = `${Math.min(100, Math.round(pct * 100))}%`;
-}
-
-function updateClock() {
-  if (!raceStartTime) return;
-  const secs = Math.floor((Date.now() - raceStartTime) / 1000);
-  el('race-timer').textContent = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
-}
-
-function onOpponentUpdate(progress, usableWpm) {
-  el('opp-progress-bar').style.width = `${Math.round(progress * 100)}%`;
-  el('opp-progress-pct').textContent = `${Math.round(progress * 100)}%`;
-  el('opp-wpm').textContent = usableWpm;
-}
-
-function sendInputUpdate(voiceValue) {
-  const value = currentMode === 'voice' ? (voiceValue || el('voice-textarea').value) : typedText;
-  send({ type: 'input:update', stationId: STATION_ID, value, corrections });
-}
-
-function checkComplete() {
-  if (typedText.length === currentPrompt.length) {
-    if ([...typedText].every((c, i) => c === currentPrompt[i])) submitRoundFinish(typedText);
+function onOpponentUpdate(progress, usableWpm, wordCount) {
+  if (wordCount !== undefined) {
+    // Multi-line mode: show word count
+    oppWordCount = wordCount;
+    el('opp-words').textContent = wordCount;
+    updateProgressBar(completedWords, oppWordCount);
+  } else {
+    // Single-prompt mode fallback
+    el('opp-progress-bar').style.width = `${Math.round((progress || 0) * 100)}%`;
+    el('opp-words').textContent = usableWpm || 0;
   }
 }
 
+function sendInputUpdate(voiceValue) {
+  const value = currentMode === 'voice'
+    ? (voiceValue !== undefined ? voiceValue : (el('voice-textarea')?.value || ''))
+    : typedText;
+  send({ type: 'input:update', stationId: STATION_ID, value, corrections });
+}
+
+// ── Single-prompt round finish (prompt-royale only) ────────────────────────────
 function submitRoundFinish(value) {
-  if (roundEndSent) return;
+  if (roundEndSent || isMultiLineRound) return;
   roundEndSent = true;
   clearInterval(wpmTimer);
   clearInterval(clockTimer);
   document.removeEventListener('keydown', onRaceKey);
 
   const finalWpm = calcWpm(value || typedText);
-  el('your-wpm').textContent = finalWpm;
-  el('finish-wpm').textContent = finalWpm;
-  el('finish-message').style.display = '';
+  el('your-words').textContent = finalWpm;
 
   send({ type: 'round:finish', stationId: STATION_ID, value: value || typedText, corrections, backspaces });
 }
@@ -588,21 +742,21 @@ function populateRoundTransition() {
   const s = serverSession;
   if (!s) return;
 
-  // Mini results from previous round
   const prevRound = s.rounds?.[s.currentRoundIndex - 1] || lastRoundResult;
   const miniEl = el('rt-mini-results');
   if (prevRound?.stationResults && miniEl) {
     const items = Object.values(prevRound.stationResults);
-    miniEl.innerHTML = items.map(r => `
-      <div class="rt-score-block">
+    miniEl.innerHTML = items.map(r => {
+      const val = prevRound.isMultiLine ? `${r.completedWords || 0} words` : `${r.usableWpm} WPM`;
+      return `<div class="rt-score-block">
         <div class="rt-score-name">${esc(r.playerName || r.stationId)}</div>
-        <div class="rt-score-num">${r.usableWpm}<small> WPM</small></div>
+        <div class="rt-score-num">${val}</div>
         <div style="font-size:11px;color:var(--text-dim)">${r.inputMode.toUpperCase()}</div>
-      </div>`).join('<div style="width:1px;background:var(--border);margin:0 8px"></div>');
+      </div>`;
+    }).join('<div style="width:1px;background:var(--border);margin:0 8px"></div>');
   }
 
-  // Next round assignments
-  const pending = s.pendingAssignments || {};
+  const pending  = s.pendingAssignments || {};
   const assignEl = el('rt-next-assignment');
   if (assignEl) {
     const rows = Object.entries(pending).map(([sid, mode]) => {
@@ -616,7 +770,6 @@ function populateRoundTransition() {
     assignEl.innerHTML = `<div class="rt-next-label">Next round</div>${rows}`;
   }
 
-  // Countdown timer
   let secs = 5;
   el('rt-timer').textContent = secs;
   clearInterval(rtTimer);
@@ -632,12 +785,11 @@ function populateResults() {
   const s = serverSession;
   if (!s) return;
 
-  const winner  = s.winner;
-  const scores  = s.playerScores || {};
-  const isSolo  = winner?.type === 'solo';
-  const isWin   = winner?.type === 'win';
-  const isTie   = winner?.type === 'tie';
-  const iAm     = winner?.stationId === STATION_ID;
+  const winner = s.winner;
+  const scores = s.playerScores || {};
+  const isSolo = winner?.type === 'solo';
+  const isTie  = winner?.type === 'tie';
+  const iAm    = winner?.stationId === STATION_ID;
 
   // Banner
   const banner = el('result-banner');
@@ -657,33 +809,47 @@ function populateResults() {
 
   // Score cards
   const scoresEl = el('result-scores');
-  const players = s.players || {};
-  const sids    = Object.keys(players).map(Number);
+  const players  = s.players || {};
+  const sids     = Object.keys(players).map(Number);
 
-  scoresEl.innerHTML = sids.map((sid, idx) => {
-    const p   = players[sid];
-    const sc  = scores[sid] || {};
-    const isW = winner?.stationId === sid;
-    const hasVoice = sc.voiceWpm > 0;
-    const hasKb    = sc.keyboardWpm > 0;
+  scoresEl.innerHTML = sids.map(sid => {
+    const p    = players[sid];
+    const sc   = scores[sid] || {};
+    const isW  = winner?.stationId === sid;
+    const hasKb    = (sc.keyboardWords || sc.keyboardWpm) > 0;
+    const hasVoice = (sc.voiceWords || sc.voiceWpm) > 0;
+    const kbWords  = sc.keyboardWords ?? sc.keyboardWpm ?? 0;
+    const voWords  = sc.voiceWords ?? sc.voiceWpm ?? 0;
+
+    // Detect if any round was multi-line (show "words" label)
+    const anyMultiLine = s.rounds?.some(r => r.isMultiLine);
+    const unit = anyMultiLine ? 'words' : 'WPM';
+
     return `<div class="result-player ${isW ? 'winner' : ''}">
       <div class="result-pname">${esc(p?.name || `Station ${sid}`)}</div>
       <div class="result-flow-score">${sc.totalFlow || 0}</div>
       <div class="result-flow-label">Flow Score</div>
       <div class="result-detail-row">
-        ${hasKb ? `<div class="result-stat"><div class="result-stat-val kb-val">${sc.keyboardWpm}</div><div class="result-stat-label">KB WPM</div></div>` : ''}
-        ${hasVoice ? `<div class="result-stat"><div class="result-stat-val voice-val">${sc.voiceWpm}</div><div class="result-stat-label">Voice WPM</div></div>` : ''}
+        ${hasKb    ? `<div class="result-stat"><div class="result-stat-val kb-val">${kbWords}</div><div class="result-stat-label">KB ${unit}</div></div>` : ''}
+        ${hasVoice ? `<div class="result-stat"><div class="result-stat-val voice-val">${voWords}</div><div class="result-stat-label">Voice ${unit}</div></div>` : ''}
       </div>
     </div>`;
   }).join('<div class="result-vs">VS</div>');
 
-  // Voice advantage
+  // Voice advantage banner
   const allScores = Object.values(scores);
-  const maxVA = Math.max(...allScores.map(s => s.voiceAdvantage || 0));
+  const maxVM = Math.max(...allScores.map(s => s.voiceMultiplier || s.voiceAdvantage || 0));
+  const maxExtra = Math.max(...allScores.map(s => s.extraWords || 0));
   const vaEl = el('voice-advantage-banner');
-  if (maxVA > 0) {
+  if (maxVM > 0 || maxExtra > 0) {
     vaEl.style.display = '';
-    el('va-number').textContent = `${maxVA}×`;
+    if (maxVM > 0) {
+      el('va-number').textContent = `${maxVM}×`;
+      el('va-label').textContent  = 'faster with voice';
+    } else {
+      el('va-number').textContent = `+${maxExtra}`;
+      el('va-label').textContent  = 'extra words with voice';
+    }
   } else {
     vaEl.style.display = 'none';
   }
@@ -702,7 +868,7 @@ function populateResults() {
     el('badges-section').style.display = 'none';
   }
 
-  // Leaderboard — fetch fresh from server
+  // Leaderboard
   fetch('/api/leaderboard')
     .then(r => r.json())
     .then(entries => renderLeaderboard(entries, 'result-leaderboard'))
@@ -722,13 +888,19 @@ function populateResults() {
 // ─── CTA ───────────────────────────────────────────────────────────────────────
 function populateCta() {
   const scores = serverSession?.playerScores || {};
-  const maxVA  = Math.max(...Object.values(scores).map(s => s.voiceAdvantage || 0));
+  const allSc  = Object.values(scores);
+  const maxVM  = Math.max(...allSc.map(s => s.voiceMultiplier || s.voiceAdvantage || 0));
+  const maxExtra = Math.max(...allSc.map(s => s.extraWords || 0));
   const qrUrl  = serverConfig?.qrUrl || 'https://wispr.ai';
 
   el('cta-headline').innerHTML = `Try <span>Wispr Flow</span>`;
-  el('cta-subline').textContent = maxVA > 0
-    ? `You were ${maxVA}× faster with your voice.`
-    : 'Talk faster than you type.';
+  if (maxVM > 0) {
+    el('cta-subline').textContent = `You were ${maxVM}× faster with your voice.`;
+  } else if (maxExtra > 0) {
+    el('cta-subline').textContent = `Voice gave you ${maxExtra} extra words in 60 seconds.`;
+  } else {
+    el('cta-subline').textContent = 'Talk faster than you type.';
+  }
   el('cta-qr-img').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(qrUrl)}`;
   el('cta-url').textContent = qrUrl;
 }
@@ -739,7 +911,10 @@ function renderLeaderboard(entries, containerId) {
   if (!c) return;
   if (!entries?.length) { c.innerHTML = '<p class="lb-empty">No scores yet — be the first!</p>'; return; }
   const medals = ['🥇', '🥈', '🥉'];
-  const modeShort = { 'swap-duel': 'Swap', 'voice-vs-keyboard': 'V×K', 'beat-the-keyboard': 'Solo', 'keyboard-race': 'KB', 'hinglish-hustle': 'HH', 'prompt-royale': 'PR' };
+  const modeShort = {
+    'swap-duel': 'Swap', 'voice-vs-keyboard': 'V×K', 'beat-the-keyboard': 'Solo',
+    'solo-output': 'Solo', 'keyboard-race': 'KB', 'hinglish-hustle': 'HH', 'prompt-royale': 'PR',
+  };
   c.innerHTML = entries.slice(0, 10).map((e, i) =>
     `<div class="lb-row ${i < 3 ? 'top-' + (i + 1) : ''}">
       <span class="lb-rank">${medals[i] || (i + 1)}</span>
@@ -751,11 +926,9 @@ function renderLeaderboard(entries, containerId) {
 
 // ─── Global key handling ───────────────────────────────────────────────────────
 function globalKeyHandler(e) {
-  // Ctrl+Shift+R — force reset
   if (e.ctrlKey && e.shiftKey && e.key === 'R') { e.preventDefault(); send({ type: 'admin:reset' }); }
 
   const screen = deriveScreen();
-
   if (screen === 'idle') {
     if (!e.ctrlKey && !e.metaKey && e.key !== 'Escape') {
       clientState = 'mode-select';

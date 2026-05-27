@@ -137,45 +137,53 @@
 
     <div class="race-header">
       <div class="race-mode-badge" id="race-mode-badge"></div>
-      <div class="race-timer" id="race-timer">0:00</div>
+      <div class="race-timer" id="race-timer">1:00</div>
       <div class="race-station-label" id="race-station-label"></div>
     </div>
 
-    <div class="race-progress-section">
-      <div class="progress-col you-col">
-        <div class="progress-header">
-          <span class="progress-name you-name" id="your-name-display">YOU</span>
-          <span class="progress-wpm"><span id="your-wpm">0</span><small>WPM</small></span>
+    <div class="race-score-bar">
+      <div class="score-col you-col">
+        <div class="score-header">
+          <span class="score-name you-name" id="your-name-display">YOU</span>
+          <span class="score-val"><span id="your-words">0</span><small> words</small></span>
         </div>
-        <div class="progress-track">
-          <div id="your-progress-bar" class="progress-fill you"></div>
-        </div>
-        <span class="progress-pct" id="your-progress-pct">0%</span>
+        <div class="score-track"><div id="your-progress-bar" class="score-fill you"></div></div>
       </div>
-      <div class="progress-col opp-col">
-        <div class="progress-header">
-          <span class="progress-name opp-name" id="opp-name-display">OPPONENT</span>
-          <span class="progress-wpm"><span id="opp-wpm">0</span><small>WPM</small></span>
+      <div class="score-col opp-col">
+        <div class="score-header">
+          <span class="score-name opp-name" id="opp-name-display">OPPONENT</span>
+          <span class="score-val"><span id="opp-words">0</span><small> words</small></span>
         </div>
-        <div class="progress-track">
-          <div id="opp-progress-bar" class="progress-fill opp"></div>
-        </div>
-        <span class="progress-pct" id="opp-progress-pct">0%</span>
+        <div class="score-track"><div id="opp-progress-bar" class="score-fill opp"></div></div>
       </div>
     </div>
 
-    <!-- Keyboard input -->
-    <div class="keyboard-area" id="keyboard-area">
-      <div id="typing-display" class="typing-display"></div>
+    <!-- Voice mode role hint -->
+    <div class="role-label" id="role-label" style="display:none">
+      <span id="role-label-text"></span>
     </div>
 
-    <!-- Voice input -->
+    <!-- Scrollable lines area -->
+    <div class="lines-area" id="lines-area">
+      <div id="completed-lines-feed" class="completed-lines-feed"></div>
+
+      <!-- Keyboard: typing display with cursor/correct/wrong chars -->
+      <div id="keyboard-area" class="keyboard-area" style="display:none">
+        <div id="typing-display" class="typing-display"></div>
+      </div>
+
+      <!-- Voice: target line text to speak -->
+      <div id="voice-target-area" class="voice-target-area" style="display:none">
+        <div id="current-line-display" class="current-line-display"></div>
+      </div>
+    </div>
+
+    <!-- Voice input textarea (below lines area) -->
     <div class="voice-area" id="voice-area" style="display:none">
-      <div class="voice-target" id="voice-target-text"></div>
       <textarea
         id="voice-textarea"
         class="voice-textarea"
-        placeholder="Click here, trigger Wispr Flow, and speak your text…"
+        placeholder="Click here, then speak with Wispr Flow…"
         spellcheck="false"
         autocomplete="off"
       ></textarea>
@@ -185,10 +193,9 @@
       </div>
     </div>
 
-    <div id="finish-message" class="finish-message" style="display:none">
-      <div class="finish-title">FINISHED!</div>
-      <div class="finish-wpm"><span id="finish-wpm">0</span> <small>WPM</small></div>
-      <div class="finish-sub">Waiting for opponent…</div>
+    <div class="race-footer">
+      <span id="race-line-indicator" class="race-line-indicator">Line 1</span>
+      <span class="race-footer-hint">Complete each line to score words</span>
     </div>
 
   </div>
@@ -215,7 +222,7 @@
 
     <div id="voice-advantage-banner" class="voice-advantage-banner" style="display:none">
       <div class="va-number" id="va-number"></div>
-      <div class="va-label">faster with voice</div>
+      <div class="va-label" id="va-label">faster with voice</div>
     </div>
 
     <div id="badges-section">
