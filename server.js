@@ -60,12 +60,21 @@ function defaultConfig() {
   };
 }
 
+// ─── Validate loaded config against available modes (run after MODES is defined) ─
+function sanitiseConfig() {
+  const valid = (config.enabledModes || []).filter(m => MODES[m]);
+  config.enabledModes = valid.length ? valid : Object.keys(MODES);
+  if (!MODES[config.defaultMode]) config.defaultMode = config.enabledModes[0];
+}
+
 // ─── Mode definitions ──────────────────────────────────────────────────────────
 const MODES = {
   'wpm-fight':          { label: 'WPM Fight',          tagline: 'Pure typing speed — who\'s faster?',  icon: '⌨️', playerCount: 2, rounds: 1 },
   'voice-vs-keyboard':  { label: 'Voice vs Keyboard',  tagline: 'One talks. One types. Who wins?',     icon: '🎙️', playerCount: 2, rounds: 1 },
   'solo-challenge':     { label: 'Solo Challenge',     tagline: 'Type then speak — beat your score.',  icon: '🏃', playerCount: 1, rounds: 2 },
 };
+
+sanitiseConfig(); // ensure loaded config only references modes that exist
 
 function getRoundAssignments(mode, roundIndex) {
   if (mode === 'voice-vs-keyboard') return { 1: 'keyboard', 2: 'voice' };

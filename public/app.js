@@ -157,7 +157,7 @@ function deriveScreen() {
   const me   = players?.[STATION_ID];
 
   // Station 2 spectating a solo mode
-  if (meta?.playerCount === 1 && STATION_ID === 2 && state === 'racing') return 'spectator';
+  if (meta?.playerCount === 1 && STATION_ID === 2) return 'spectator';
 
   switch (state) {
     case 'name-entry':      return me?.isReady ? 'waiting' : 'name-entry';
@@ -174,6 +174,12 @@ function renderScreen(name) {
   document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
   const s = el(`screen-${name}`);
   if (s) s.classList.add('active');
+  // Always remove race key listener when leaving racing screen
+  if (name !== 'racing') {
+    document.removeEventListener('keydown', onRaceKey);
+    clearInterval(wpmTimer);
+    clearInterval(clockTimer);
+  }
 }
 
 // ─── Screen population ─────────────────────────────────────────────────────────
@@ -359,11 +365,11 @@ function populateWaiting() {
   el('waiting-your-name').textContent  = playerName || players[STATION_ID]?.name || 'YOU';
   el('waiting-mode-label').textContent = meta ? `${meta.icon} ${meta.label}` : '';
 
-  const vsDiv    = el('vs-divider');
+  const vsDiv    = document.querySelector('.vs-divider');
   const oppCard  = el('waiting-opp-card');
 
   if (isSolo) {
-    // Solo challenge — hide VS + opponent card, show solo ready state
+    // Solo challenge — hide VS + opponent card
     if (vsDiv)   vsDiv.style.display   = 'none';
     if (oppCard) oppCard.style.display = 'none';
   } else {
@@ -916,6 +922,7 @@ function populateResults() {
 
   if (showVoice) {
     voSection.style.display = '';
+    el('voice-advantage-banner').style.display = ''; // reset before conditional hide below
 
     // Determine card labels and per-card numbers
     let kbLabel = 'Keyboard', voLabel = 'Wispr Flow';

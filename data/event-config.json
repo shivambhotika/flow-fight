@@ -1,26 +1,20 @@
 {
-  "eventId": "partner_mixer_2026_05",
+  "eventId": "event_001",
   "eventName": "Flow Fight",
   "partnerName": "",
-  "defaultMode": "swap-duel",
+  "defaultMode": "wpm-fight",
   "enabledModes": [
-    "swap-duel",
+    "wpm-fight",
     "voice-vs-keyboard",
-    "beat-the-keyboard",
-    "keyboard-race",
-    "hinglish-hustle",
-    "prompt-royale"
+    "solo-challenge"
   ],
-  "roundSeconds": 25,
+  "roundSeconds": 60,
   "countdownSeconds": 3,
   "resultsSeconds": 15,
   "ctaSeconds": 10,
-  "autoResetSeconds": 5,
   "enableVoiceMode": true,
-  "enableHinglish": true,
   "enableQrCta": true,
   "qrUrl": "https://wispr.ai",
   "qrLabel": "Try Wispr Flow",
-  "leaderboardLimit": 20,
-  "scoringMode": "flow-score"
+  "leaderboardLimit": 20
 }
