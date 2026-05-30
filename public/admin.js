@@ -1,10 +1,10 @@
 'use strict';
 
-const ALL_MODES = ['swap-duel', 'voice-vs-keyboard', 'beat-the-keyboard', 'solo-output', 'keyboard-race', 'hinglish-hustle', 'prompt-royale'];
+const ALL_MODES = ['wpm-fight', 'voice-vs-keyboard', 'solo-challenge'];
 const MODE_LABELS = {
-  'swap-duel': 'Swap Duel', 'voice-vs-keyboard': 'Voice vs Keyboard',
-  'beat-the-keyboard': 'Beat the Keyboard', 'solo-output': 'Solo Output Challenge',
-  'keyboard-race': 'Keyboard Race', 'hinglish-hustle': 'Hinglish Hustle', 'prompt-royale': 'Prompt Royale',
+  'wpm-fight': 'WPM Fight',
+  'voice-vs-keyboard': 'Voice vs Keyboard',
+  'solo-challenge': 'Solo Challenge',
 };
 
 let currentConfig = {};
@@ -40,7 +40,7 @@ function fetchConfig() {
     // Populate fields
     setVal('cfg-eventName',     cfg.eventName || '');
     setVal('cfg-partnerName',   cfg.partnerName || '');
-    setVal('cfg-defaultMode',   cfg.defaultMode || 'swap-duel');
+    setVal('cfg-defaultMode',   cfg.defaultMode || 'wpm-fight');
     setVal('cfg-roundSeconds',  cfg.roundSeconds ?? 25);
     setVal('cfg-qrUrl',         cfg.qrUrl || '');
     setVal('cfg-resultsSeconds',cfg.resultsSeconds ?? 15);
@@ -49,7 +49,7 @@ function fetchConfig() {
       cb.checked = (cfg.enabledModes || ALL_MODES).includes(cb.value);
     });
     // Sync launch select + default select
-    setVal('launch-mode-select', cfg.defaultMode || 'swap-duel');
+    setVal('launch-mode-select', cfg.defaultMode || 'wpm-fight');
   }).catch(() => {});
 }
 

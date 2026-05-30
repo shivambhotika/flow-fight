@@ -8,13 +8,9 @@ const STATION_ID = _pathMatch
 
 // ─── Mode config (mirrors server) ─────────────────────────────────────────────
 const MODES_META = {
-  'keyboard-race':     { label: 'Keyboard Race',        tagline: 'Classic WPM race.', icon: '⌨️',  playerCount: 2, rounds: 1 },
-  'voice-vs-keyboard': { label: 'Voice vs Keyboard',    tagline: 'One talks. One types.', icon: '🎙️', playerCount: 2, rounds: 1 },
-  'swap-duel':         { label: 'Swap Duel',             tagline: 'Both do both. Fairest battle.', icon: '🔄', playerCount: 2, rounds: 2 },
-  'beat-the-keyboard': { label: 'Beat the Keyboard',     tagline: 'Solo: type then speak.', icon: '🥊', playerCount: 1, rounds: 2 },
-  'solo-output':       { label: 'Solo Output Challenge', tagline: '60s — how many words?', icon: '⚡', playerCount: 1, rounds: 1 },
-  'hinglish-hustle':   { label: 'Hinglish Hustle',       tagline: 'Mix it up.', icon: '🇮🇳',         playerCount: 2, rounds: 1 },
-  'prompt-royale':     { label: 'Prompt Royale',         tagline: 'Real-world writing.', icon: '✍️', playerCount: 2, rounds: 1 },
+  'wpm-fight':          { label: 'WPM Fight',         tagline: 'Pure typing speed — who\'s faster?', icon: '⌨️', playerCount: 2, rounds: 1 },
+  'voice-vs-keyboard':  { label: 'Voice vs Keyboard', tagline: 'One talks. One types. Who wins?',    icon: '🎙️', playerCount: 2, rounds: 1 },
+  'solo-challenge':     { label: 'Solo Challenge',    tagline: 'Type then speak — beat your score.', icon: '🏃', playerCount: 1, rounds: 2 },
 };
 
 const BADGE_META = {
@@ -358,18 +354,31 @@ function populateWaiting() {
   const players = serverSession?.players || {};
   const mode    = serverSession?.mode;
   const meta    = MODES_META[mode];
-  el('waiting-your-name').textContent = playerName || players[STATION_ID]?.name || 'YOU';
+  const isSolo  = meta?.playerCount === 1;
+
+  el('waiting-your-name').textContent  = playerName || players[STATION_ID]?.name || 'YOU';
   el('waiting-mode-label').textContent = meta ? `${meta.icon} ${meta.label}` : '';
 
-  const otherId = STATION_ID === 1 ? 2 : 1;
-  const otherP  = players[otherId];
-  if (otherP) {
-    el('waiting-opp-name').textContent = otherP.name;
-    el('waiting-opp-name').style.display = '';
-    el('waiting-opp-status').innerHTML = '<span style="color:var(--success)">● READY</span>';
+  const vsDiv    = el('vs-divider');
+  const oppCard  = el('waiting-opp-card');
+
+  if (isSolo) {
+    // Solo challenge — hide VS + opponent card, show solo ready state
+    if (vsDiv)   vsDiv.style.display   = 'none';
+    if (oppCard) oppCard.style.display = 'none';
   } else {
-    el('waiting-opp-name').style.display = 'none';
-    el('waiting-opp-status').innerHTML = '<span class="dot-pulse">●</span> Waiting for opponent…';
+    if (vsDiv)   vsDiv.style.display   = '';
+    if (oppCard) oppCard.style.display = '';
+    const otherId = STATION_ID === 1 ? 2 : 1;
+    const otherP  = players[otherId];
+    if (otherP) {
+      el('waiting-opp-name').textContent = otherP.name;
+      el('waiting-opp-name').style.display = '';
+      el('waiting-opp-status').innerHTML = '<span style="color:var(--success)">● READY</span>';
+    } else {
+      el('waiting-opp-name').style.display = 'none';
+      el('waiting-opp-status').innerHTML = '<span class="dot-pulse">●</span> Waiting for opponent…';
+    }
   }
 }
 
@@ -386,7 +395,7 @@ function populateCountdown() {
   el('countdown-mode-label').textContent = meta ? `${meta.icon} ${meta.label} — Round ${(s.currentRoundIndex || 0) + 1}` : '';
 
   const p1name = s.players?.[1]?.name || 'Station 1';
-  const p2name = mode === 'beat-the-keyboard' || mode === 'solo-output' ? '—' : (s.players?.[2]?.name || 'Station 2');
+  const p2name = mode === 'solo-challenge' ? '—' : (s.players?.[2]?.name || 'Station 2');
   el('countdown-p1-name').textContent = p1name;
   el('countdown-p2-name').textContent = p2name;
 
@@ -446,7 +455,7 @@ function populateRacing() {
   // Names / labels
   const otherId = STATION_ID === 1 ? 2 : 1;
   el('your-name-display').textContent  = s.players?.[STATION_ID]?.name || `Station ${STATION_ID}`;
-  el('opp-name-display').textContent   = s.players?.[otherId]?.name || (s.mode === 'beat-the-keyboard' || s.mode === 'solo-output' ? '—' : `Station ${otherId}`);
+  el('opp-name-display').textContent   = s.players?.[otherId]?.name || (s.mode === 'solo-challenge' ? '—' : `Station ${otherId}`);
   el('race-mode-badge').textContent    = MODES_META[s.mode]?.label || s.mode;
   el('race-station-label').textContent = `STATION ${STATION_ID} · ${currentMode.toUpperCase()}`;
 
@@ -506,10 +515,17 @@ function onRaceKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   e.preventDefault();
 
+  // Enter or Tab advances to next line in multi-line mode (errors don't matter)
+  if ((e.key === 'Enter' || e.key === 'Tab') && isMultiLineRound) {
+    if (typedText.length > 0) lineComplete('keyboard');
+    return;
+  }
+
   if (e.key === 'Backspace') {
     if (typedText.length > 0) { typedText = typedText.slice(0, -1); backspaces++; }
-  } else if (e.key.length === 1 && typedText.length < currentPrompt.length) {
-    if (e.key !== currentPrompt[typedText.length]) corrections++;
+  } else if (e.key.length === 1 && typedText.length < currentPrompt.length + 5) {
+    // Allow a small overshoot buffer so last char always registers
+    if (typedText.length < currentPrompt.length && e.key !== currentPrompt[typedText.length]) corrections++;
     typedText += e.key;
   } else { return; }
 
@@ -610,12 +626,12 @@ function normalizeForMatch(t) {
 // ── Line completion (multi-line mode) ─────────────────────────────────────────
 function checkLineComplete() {
   if (!isMultiLineRound) {
-    // Single-prompt keyboard: exact match submits round
     if (typedText === currentPrompt) submitRoundFinish(typedText);
     return;
   }
+  // Errors don't block progress — advance as soon as the full line length is typed
   const target = lineQueue[currentLineIndex]?.text || '';
-  if (typedText === target) lineComplete('keyboard');
+  if (typedText.length >= target.length) lineComplete('keyboard');
 }
 
 function lineComplete(inputMode) {
@@ -626,7 +642,7 @@ function lineComplete(inputMode) {
   completedWords += wordCount;
 
   // Tell server
-  send({ type: 'line:complete', stationId: STATION_ID, lineIdx: currentLineIndex, wordCount });
+  send({ type: 'line:complete', stationId: STATION_ID, lineIdx: currentLineIndex, wordCount, errors: corrections });
 
   // Brief visual flash
   showLineCompleteFlash();
@@ -855,86 +871,108 @@ function populateResults() {
   const s = serverSession;
   if (!s) return;
 
-  const winner   = s.winner;
-  const scores   = s.playerScores || {};
-  const allSc    = Object.values(scores);
-  const isSolo   = winner?.type === 'solo';
-  const isTie    = winner?.type === 'tie';
-  const iAm      = winner?.stationId === STATION_ID;
-  const anyMultiLine = s.rounds?.some(r => r.isMultiLine);
-  const unit     = anyMultiLine ? 'words' : 'WPM';
+  const winner  = s.winner;
+  const scores  = s.playerScores || {};
+  const allSc   = Object.values(scores);
+  const players = s.players || {};
+  const mode    = s.mode;
+  const dur     = s.rounds?.[0]?.durationSeconds || 60;
 
-  // Compute aggregate voice/keyboard across all players for solo+swap-duel
-  const allKb    = allSc.map(sc => sc.keyboardWords ?? sc.keyboardWpm ?? 0);
-  const allVo    = allSc.map(sc => sc.voiceWords    ?? sc.voiceWpm    ?? 0);
-  const hasVoice = allVo.some(v => v > 0);
-  const hasKb    = allKb.some(k => k > 0);
+  const isSoloMode = mode === 'solo-challenge';
+  const isVvK      = mode === 'voice-vs-keyboard';
+
+  // ── Aggregate totals across all players ──
+  const totalKbWords  = allSc.reduce((sum, sc) => sum + (sc.keyboardWords || 0), 0);
+  const totalVoWords  = allSc.reduce((sum, sc) => sum + (sc.voiceWords    || 0), 0);
+  const totalKbErrors = allSc.reduce((sum, sc) => sum + (sc.keyboardErrors || 0), 0);
+  const hasVoice = totalVoWords > 0;
 
   // ── Banner ──
   const banner = el('result-banner');
-  if (isSolo && hasVoice && hasKb) {
-    const kb = allKb[0]; const vo = allVo[0];
-    const mult = kb > 0 ? (vo / kb).toFixed(1) : null;
-    banner.innerHTML = mult
+  if (hasVoice && totalKbWords > 0) {
+    const mult = Math.round((totalVoWords / totalKbWords) * 10) / 10;
+    banner.textContent = mult > 1
       ? `${mult}× more output with Flow`
-      : `${vo} words with Flow`;
+      : `${totalVoWords} words with your voice`;
     banner.className = 'result-banner voice-lift';
-  } else if (isSolo) {
-    banner.textContent = `${esc(winner?.name || 'Done')} — Round Complete`;
-    banner.className = 'result-banner solo';
-  } else if (isTie) {
+  } else if (hasVoice) {
+    banner.textContent = `${totalVoWords} words with Wispr Flow`;
+    banner.className = 'result-banner voice-lift';
+  } else if (winner?.type === 'tie') {
     banner.textContent = "IT'S A TIE!";
     banner.className = 'result-banner tie';
-  } else if (iAm) {
-    banner.textContent = `${esc(winner?.name || 'You')} WINS! 🏆`;
-    banner.className = 'result-banner win';
+  } else if (winner?.stationId) {
+    const iAm = winner.stationId === STATION_ID;
+    banner.textContent = iAm ? `🏆 You win!` : `${esc(winner.name)} wins`;
+    banner.className = `result-banner ${iAm ? 'win' : 'lose'}`;
   } else {
-    banner.textContent = `${esc(winner?.name || '??')} WINS`;
-    banner.className = 'result-banner lose';
+    banner.textContent = 'Round Complete';
+    banner.className = 'result-banner solo';
   }
 
-  // ── Voice Output Comparison Section ──
+  // ── Voice Comparison Cards (solo-challenge + voice-vs-keyboard) ──
   const voSection = el('voice-output-section');
-  const voCards   = el('vo-cards');
-  const vaNum     = el('va-number');
-  const vaLbl     = el('va-label');
+  const showVoice = hasVoice && (isSoloMode || isVvK);
 
-  if (hasVoice && anyMultiLine) {
+  if (showVoice) {
     voSection.style.display = '';
 
-    // For solo: show single player comparison
-    // For two-player: pick the player at this station
-    const mySc  = scores[STATION_ID] || allSc[0] || {};
-    const kb    = mySc.keyboardWords ?? mySc.keyboardWpm ?? 0;
-    const vo    = mySc.voiceWords    ?? mySc.voiceWpm    ?? 0;
-    const extra = mySc.extraWords    ?? Math.max(0, vo - kb);
-    const mult  = mySc.voiceMultiplier ?? (kb > 0 && vo > 0 ? Math.round((vo/kb)*10)/10 : null);
+    // Determine card labels and per-card numbers
+    let kbLabel = 'Keyboard', voLabel = 'Wispr Flow';
+    let kbWords = 0, voWords = 0, kbErrors = 0;
 
-    voCards.innerHTML = `
+    if (isSoloMode) {
+      const solo = scores[1] || allSc[0] || {};
+      kbWords  = solo.keyboardWords  || 0;
+      voWords  = solo.voiceWords     || 0;
+      kbErrors = solo.keyboardErrors || 0;
+      kbLabel  = 'Round 1 · Keyboard';
+      voLabel  = 'Round 2 · Flow';
+    } else {
+      // voice-vs-keyboard: find which player was which
+      Object.entries(scores).forEach(([sid, sc]) => {
+        const name = players[parseInt(sid)]?.name || `Station ${sid}`;
+        if ((sc.keyboardWords || 0) > 0) {
+          kbLabel = name; kbWords = sc.keyboardWords; kbErrors = sc.keyboardErrors || 0;
+        }
+        if ((sc.voiceWords || 0) > 0) {
+          voLabel = name; voWords = sc.voiceWords;
+        }
+      });
+    }
+
+    const mult = kbWords > 0 && voWords > 0
+      ? Math.round((voWords / kbWords) * 10) / 10 : null;
+
+    el('vo-cards').innerHTML = `
       <div class="vo-card kb-card">
         <div class="vo-card-icon">⌨️</div>
-        <div class="vo-card-label">Keyboard</div>
-        <div class="vo-card-words">${kb}</div>
-        <div class="vo-card-sublabel">${unit} in ${s.currentRound?.durationSeconds || 60}s</div>
+        <div class="vo-card-label">${esc(kbLabel)}</div>
+        <div class="vo-card-words">${kbWords}</div>
+        <div class="vo-card-sublabel">words · ${dur}s</div>
+        ${kbErrors > 0 ? `<div class="vo-card-errors">${kbErrors} error${kbErrors !== 1 ? 's' : ''}</div>` : ''}
       </div>
       <div class="vo-card flow-card">
         <div class="vo-card-icon">🎙️</div>
-        <div class="vo-card-label">Wispr Flow</div>
-        <div class="vo-card-words">${vo}</div>
-        <div class="vo-card-sublabel">${unit} in ${s.currentRound?.durationSeconds || 60}s</div>
+        <div class="vo-card-label">${esc(voLabel)}</div>
+        <div class="vo-card-words">${voWords}</div>
+        <div class="vo-card-sublabel">words · ${dur}s</div>
       </div>`;
 
-    if (mult !== null && mult > 0) {
+    const vaNum = el('va-number');
+    const vaLbl = el('va-label');
+    if (mult !== null && mult > 1) {
       vaNum.textContent = `${mult}×`;
       vaLbl.textContent = 'more output with Flow';
-    } else if (extra > 0) {
-      vaNum.textContent = `+${extra}`;
-      vaLbl.textContent = `extra ${unit} with Flow`;
-    } else if (vo > 0 && kb === 0) {
-      vaNum.textContent = `${vo}`;
-      vaLbl.textContent = `${unit} spoken`;
+    } else if (voWords > kbWords) {
+      vaNum.textContent = `+${voWords - kbWords}`;
+      vaLbl.textContent = 'extra words with Flow';
+    } else if (voWords > 0 && kbWords === 0) {
+      vaNum.textContent = `${voWords}`;
+      vaLbl.textContent = 'words spoken';
     } else {
-      voSection.style.display = 'none';
+      // Flow didn't beat keyboard — still show "KB wins" in the banner above
+      el('voice-advantage-banner').style.display = 'none';
     }
   } else {
     voSection.style.display = 'none';
@@ -942,26 +980,34 @@ function populateResults() {
 
   // ── Per-player score cards ──
   const scoresEl = el('result-scores');
-  const players  = s.players || {};
-  const sids     = Object.keys(players).map(Number);
+  const sids = Object.keys(players).map(Number).sort();
 
   scoresEl.innerHTML = sids.map(sid => {
-    const p      = players[sid];
-    const sc     = scores[sid] || {};
-    const isW    = winner?.stationId === sid;
-    const kbW    = sc.keyboardWords ?? sc.keyboardWpm ?? 0;
-    const voW    = sc.voiceWords    ?? sc.voiceWpm    ?? 0;
-    const hasKbP = kbW > 0;
-    const hasVoP = voW > 0;
+    const p    = players[sid];
+    const sc   = scores[sid] || {};
+    const isW  = winner?.stationId === sid;
+    const kbW  = sc.keyboardWords  || 0;
+    const voW  = sc.voiceWords     || 0;
+    const kbE  = sc.keyboardErrors || 0;
+    const voE  = sc.voiceErrors    || 0;
+    const best = Math.max(kbW, voW);
+    const errs = kbE + voE;
+
+    let detail = '';
+    if (kbW > 0 && voW > 0) {
+      detail = `<span class="res-mode-pill kb-pill">⌨️ ${kbW}</span><span class="res-mode-pill vo-pill">🎙️ ${voW}</span>`;
+    } else if (kbW > 0) {
+      detail = `<span class="res-mode-pill kb-pill">⌨️ typed</span>`;
+    } else if (voW > 0) {
+      detail = `<span class="res-mode-pill vo-pill">🎙️ spoken</span>`;
+    }
 
     return `<div class="result-player ${isW ? 'winner' : ''}">
       <div class="result-pname">${esc(p?.name || `Station ${sid}`)}</div>
-      <div class="result-flow-score">${sc.totalFlow || 0}</div>
-      <div class="result-flow-label">Flow Score</div>
-      <div class="result-detail-row">
-        ${hasKbP ? `<div class="result-stat"><div class="result-stat-val kb-val">${kbW}</div><div class="result-stat-label">⌨️ ${unit}</div></div>` : ''}
-        ${hasVoP ? `<div class="result-stat"><div class="result-stat-val voice-val">${voW}</div><div class="result-stat-label">🎙️ ${unit}</div></div>` : ''}
-      </div>
+      <div class="result-big-num">${best}</div>
+      <div class="result-big-unit">words</div>
+      <div class="result-errors-line ${errs === 0 ? 'clean' : ''}">${errs === 0 ? '✓ No errors' : `${errs} error${errs !== 1 ? 's' : ''}`}</div>
+      <div class="result-mode-pills">${detail}</div>
     </div>`;
   }).join(sids.length > 1 ? '<div class="result-vs">VS</div>' : '');
 
@@ -971,8 +1017,7 @@ function populateResults() {
   if (allBadges.length) {
     badgesEl.innerHTML = allBadges.map(b => {
       const meta = BADGE_META[b];
-      if (!meta) return '';
-      return `<div class="badge-chip">${meta.emoji} ${meta.label}</div>`;
+      return meta ? `<div class="badge-chip">${meta.emoji} ${meta.label}</div>` : '';
     }).join('');
     el('badges-section').style.display = '';
   } else {
@@ -1023,8 +1068,7 @@ function renderLeaderboard(entries, containerId) {
   if (!entries?.length) { c.innerHTML = '<p class="lb-empty">No scores yet — be the first!</p>'; return; }
   const medals = ['🥇', '🥈', '🥉'];
   const modeShort = {
-    'swap-duel': 'Swap', 'voice-vs-keyboard': 'V×K', 'beat-the-keyboard': 'Solo',
-    'solo-output': 'Solo', 'keyboard-race': 'KB', 'hinglish-hustle': 'HH', 'prompt-royale': 'PR',
+    'wpm-fight': 'WPM', 'voice-vs-keyboard': 'V×K', 'solo-challenge': 'Solo',
   };
   c.innerHTML = entries.slice(0, 10).map((e, i) =>
     `<div class="lb-row ${i < 3 ? 'top-' + (i + 1) : ''}">

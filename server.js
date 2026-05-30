@@ -52,31 +52,25 @@ let promptsDb   = loadJson('prompts.json', []);
 function defaultConfig() {
   return {
     eventId: 'event_001', eventName: 'Flow Fight', partnerName: '',
-    defaultMode: 'swap-duel',
-    enabledModes: ['swap-duel','voice-vs-keyboard','beat-the-keyboard','solo-output','keyboard-race','hinglish-hustle','prompt-royale'],
+    defaultMode: 'wpm-fight',
+    enabledModes: ['wpm-fight', 'voice-vs-keyboard', 'solo-challenge'],
     roundSeconds: 60, countdownSeconds: 3, resultsSeconds: 15, ctaSeconds: 10,
-    enableVoiceMode: true, enableHinglish: true, enableQrCta: true,
+    enableVoiceMode: true, enableQrCta: true,
     qrUrl: 'https://wispr.ai', qrLabel: 'Try Wispr Flow', leaderboardLimit: 20,
   };
 }
 
 // ─── Mode definitions ──────────────────────────────────────────────────────────
 const MODES = {
-  'keyboard-race':     { label: 'Keyboard Race',          tagline: 'Classic WPM race.', icon: '⌨️',  playerCount: 2, rounds: 1 },
-  'voice-vs-keyboard': { label: 'Voice vs Keyboard',      tagline: 'One talks. One types.', icon: '🎙️', playerCount: 2, rounds: 1 },
-  'swap-duel':         { label: 'Swap Duel',               tagline: 'Both do both. Fairest battle.', icon: '🔄', playerCount: 2, rounds: 2 },
-  'beat-the-keyboard': { label: 'Beat the Keyboard',       tagline: 'Solo: type then speak.', icon: '🥊', playerCount: 1, rounds: 2 },
-  'solo-output':       { label: 'Solo Output Challenge',   tagline: '60s — how many words?', icon: '⚡', playerCount: 1, rounds: 1 },
-  'hinglish-hustle':   { label: 'Hinglish Hustle',         tagline: 'Mix it up.', icon: '🇮🇳',         playerCount: 2, rounds: 1 },
-  'prompt-royale':     { label: 'Prompt Royale',           tagline: 'Real-world writing.', icon: '✍️', playerCount: 2, rounds: 1 },
+  'wpm-fight':          { label: 'WPM Fight',          tagline: 'Pure typing speed — who\'s faster?',  icon: '⌨️', playerCount: 2, rounds: 1 },
+  'voice-vs-keyboard':  { label: 'Voice vs Keyboard',  tagline: 'One talks. One types. Who wins?',     icon: '🎙️', playerCount: 2, rounds: 1 },
+  'solo-challenge':     { label: 'Solo Challenge',     tagline: 'Type then speak — beat your score.',  icon: '🏃', playerCount: 1, rounds: 2 },
 };
 
 function getRoundAssignments(mode, roundIndex) {
   if (mode === 'voice-vs-keyboard') return { 1: 'keyboard', 2: 'voice' };
-  if (mode === 'swap-duel')         return roundIndex === 0 ? { 1: 'keyboard', 2: 'voice' } : { 1: 'voice', 2: 'keyboard' };
-  if (mode === 'beat-the-keyboard') return roundIndex === 0 ? { 1: 'keyboard' } : { 1: 'voice' };
-  if (mode === 'solo-output')       return { 1: 'keyboard' };
-  return { 1: 'keyboard', 2: 'keyboard' };
+  if (mode === 'solo-challenge')    return roundIndex === 0 ? { 1: 'keyboard' } : { 1: 'voice' };
+  return { 1: 'keyboard', 2: 'keyboard' }; // wpm-fight + default
 }
 
 // ─── Station & session state ───────────────────────────────────────────────────
@@ -137,24 +131,17 @@ function pickPrompt(mode) {
 }
 
 // Pick a queue of one-liner prompts for the multi-line race
-function pickLineQueue(mode, count = 20) {
-  let pool;
-  if (mode === 'hinglish-hustle') {
-    pool = promptsDb.filter(p => p.category === 'hinglish' || p.category === 'one_liner');
-  } else {
-    pool = promptsDb.filter(p => p.category === 'one_liner');
-  }
+function pickLineQueue(_mode, count = 25) {
+  let pool = promptsDb.filter(p => p.category === 'one_liner');
   // Fill up if not enough one-liners
   if (pool.length < count) {
     const extra = promptsDb.filter(p =>
-      !['hinglish','royale','one_liner'].includes(p.category) &&
-      p.text.length < 90 &&
+      p.category !== 'one_liner' && p.text.length < 90 &&
       !pool.some(q => q.id === p.id)
     );
     pool = [...pool, ...extra];
   }
   if (!pool.length) pool = promptsDb;
-  // Shuffle and return count items
   return [...pool].sort(() => Math.random() - 0.5).slice(0, Math.min(count, pool.length));
 }
 
@@ -244,7 +231,7 @@ function topEntries(bucket, limit = 20) {
 // ─── Session state machine ─────────────────────────────────────────────────────
 function createSession(mode) {
   clearAllTimers();
-  const modeConf = MODES[mode] || MODES['swap-duel'];
+  const modeConf = MODES[mode] || MODES['wpm-fight'];
   session = {
     id: uid(), mode, state: 'name-entry',
     players: {}, rounds: [], currentRoundIndex: 0,
@@ -261,8 +248,8 @@ function checkBothReady() {
   if (needed.every(id => stations.get(id)?.ready)) startCountdown();
 }
 
-function isMultiLineMode(mode) {
-  return mode !== 'prompt-royale';
+function isMultiLineMode(_mode) {
+  return true; // all 3 modes are multi-line 60s races
 }
 
 function startCountdown() {
@@ -324,7 +311,7 @@ function startRound() {
   if (round.isMultiLine) {
     session.stationState = {};
     Object.keys(round.inputAssignments).forEach(id => {
-      session.stationState[id] = { lineIdx: 0, completedWords: 0, lastValue: '' };
+      session.stationState[id] = { lineIdx: 0, completedWords: 0, lastValue: '', errors: 0 };
     });
   }
 
@@ -399,7 +386,7 @@ function forceEndRound() {
         inputMode, rawText: ss.lastValue,
         completedWords: totalWords,
         rawWpm: usableWpm, usableWpm, accuracy: 1.0,
-        corrections: 0, backspaces: 0,
+        corrections: ss.errors || 0, backspaces: 0,
         completed: false, completionTimeMs: durationMs,
         flowScore, badgeIds: [],
       };
@@ -441,17 +428,18 @@ function endSession() {
   const playerScores = {};
 
   for (const [sid, player] of Object.entries(session.players)) {
-    let totalFlow = 0, keyboardWords = 0, voiceWords = 0;
+    let totalFlow = 0, keyboardWords = 0, voiceWords = 0, keyboardErrors = 0, voiceErrors = 0;
     session.rounds.forEach(round => {
       const r = round.stationResults[parseInt(sid)];
       if (!r) return;
       totalFlow += r.flowScore;
-      if (round.isMultiLine) {
-        if (r.inputMode === 'keyboard') keyboardWords = r.completedWords || 0;
-        if (r.inputMode === 'voice')    voiceWords    = r.completedWords || 0;
-      } else {
-        if (r.inputMode === 'keyboard') keyboardWords = r.usableWpm;
-        if (r.inputMode === 'voice')    voiceWords    = r.usableWpm;
+      if (r.inputMode === 'keyboard') {
+        keyboardWords  = r.completedWords || r.usableWpm || 0;
+        keyboardErrors = r.corrections    || 0;
+      }
+      if (r.inputMode === 'voice') {
+        voiceWords  = r.completedWords || r.usableWpm || 0;
+        voiceErrors = r.corrections    || 0;
       }
     });
 
@@ -465,6 +453,7 @@ function endSession() {
       keyboardWpm: keyboardWords,   // kept for compat
       voiceWpm: voiceWords,         // kept for compat
       keyboardWords, voiceWords, extraWords, voiceMultiplier,
+      keyboardErrors, voiceErrors,
       badges,
     };
 
@@ -487,7 +476,7 @@ function endSession() {
         rawWpm: r.rawWpm, usableWpm: r.usableWpm, accuracy: r.accuracy,
         flowScore: r.flowScore, voiceAdvantage: voiceMultiplier,
         badgeIds: r.badgeIds, completed: r.completed,
-        completedWords: r.completedWords || 0,
+        completedWords: r.completedWords || 0, corrections: r.corrections || 0,
       });
     });
     saveJson('runs.json', runs);
@@ -576,7 +565,7 @@ wss.on('connection', (ws) => {
         if (round.isMultiLine) {
           // Store lastValue for partial scoring at round-end
           const ss = session.stationState?.[sid];
-          if (ss) ss.lastValue = msg.value || '';
+          if (ss) { ss.lastValue = msg.value || ''; if (msg.corrections !== undefined) ss.errors = msg.corrections; }
 
           // Compute live word count (completed + partial) for leaderboard display
           const elapsed      = Date.now() - (round.startedAt || Date.now());
@@ -610,6 +599,7 @@ wss.on('connection', (ws) => {
         ss.completedWords += wordCount;
         ss.lineIdx++;
         ss.lastValue = '';
+        if (msg.errors !== undefined) ss.errors = msg.errors;
 
         const elapsed    = Date.now() - (round.startedAt || Date.now());
         const mins       = Math.max(elapsed / 60000, 0.001);
@@ -635,8 +625,9 @@ wss.on('connection', (ws) => {
       }
 
       case 'admin:mode': {
+        const m = msg.mode || config.defaultMode;
         doReset();
-        later(() => createSession(msg.mode || config.defaultMode), 100);
+        later(() => createSession(m), 100);
         break;
       }
     }
