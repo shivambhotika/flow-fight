@@ -61,6 +61,7 @@ let config = {
   enabledModes: [SOLO_MODE],
   roundSeconds: Number(storedConfig.roundSeconds) || 60,
   countdownSeconds: Number(storedConfig.countdownSeconds) || 3,
+  transitionSeconds: Number(storedConfig.transitionSeconds) || 10,
   resultsSeconds: Number(storedConfig.resultsSeconds) || 15,
   ctaSeconds: Number(storedConfig.ctaSeconds) || 10,
   enableVoiceMode: true,
@@ -82,6 +83,7 @@ function publicConfig() {
     defaultMode: SOLO_MODE,
     roundSeconds: config.roundSeconds,
     countdownSeconds: config.countdownSeconds,
+    transitionSeconds: config.transitionSeconds,
     resultsSeconds: config.resultsSeconds,
     ctaSeconds: config.ctaSeconds,
     enableQrCta: config.enableQrCta,
@@ -360,7 +362,7 @@ function endRound(runtime) {
       if (!runtime.session) return;
       runtime.session.pendingAssignments = null;
       startCountdown(runtime);
-    }, 5000);
+    }, config.transitionSeconds * 1000);
     return;
   }
 
@@ -601,9 +603,9 @@ app.post('/api/transcribe-name', async (req, res) => {
     const form = new FormData();
     const extension = mimeType.includes('mp4') ? 'm4a' : mimeType.includes('ogg') ? 'ogg' : 'webm';
     form.append('file', new Blob([audio], { type: mimeType }), `name.${extension}`);
-    form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-4o-mini-transcribe');
-    form.append('language', 'en');
-    form.append('prompt', 'The speaker is saying their name. Transcribe only the name, preserving the spoken spelling as closely as possible.');
+    form.append('model', process.env.OPENAI_TRANSCRIBE_MODEL || 'gpt-transcribe');
+    form.append('languages[]', 'en');
+    form.append('prompt', 'A short name spoken by a player joining a Wispr Flow event game.');
 
     const response = await fetch('https://api.openai.com/v1/audio/transcriptions', {
       method: 'POST',
@@ -644,7 +646,7 @@ app.get('/api/status', (_req, res) => res.json({
 
 app.get('/api/config', (_req, res) => res.json(config));
 app.post('/api/config', (req, res) => {
-  const allowed = ['eventName', 'partnerName', 'roundSeconds', 'countdownSeconds', 'resultsSeconds', 'ctaSeconds', 'enableQrCta', 'qrUrl', 'qrLabel', 'leaderboardLimit'];
+  const allowed = ['eventName', 'partnerName', 'roundSeconds', 'countdownSeconds', 'transitionSeconds', 'resultsSeconds', 'ctaSeconds', 'enableQrCta', 'qrUrl', 'qrLabel', 'leaderboardLimit'];
   allowed.forEach(key => {
     if (req.body?.[key] !== undefined) config[key] = req.body[key];
   });

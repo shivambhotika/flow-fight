@@ -812,7 +812,7 @@ function populateRoundTransition() {
     assignEl.innerHTML = `<div class="rt-next-label">Next round</div>${rows}`;
   }
 
-  let secs = 5;
+  let secs = serverConfig?.transitionSeconds || 10;
   el('rt-timer').textContent = secs;
   clearInterval(rtTimer);
   rtTimer = setInterval(() => {

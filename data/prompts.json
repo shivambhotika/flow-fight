@@ -1,67 +1,122 @@
 [
-  { "id": "easy_001", "text": "I'll be there in 10 minutes. Please start without me.", "category": "easy", "difficulty": "easy" },
-  { "id": "easy_002", "text": "Great meeting you today. Let's find time next week to chat.", "category": "easy", "difficulty": "easy" },
-  { "id": "easy_003", "text": "Can you send me the deck and the notes from the session?", "category": "easy", "difficulty": "easy" },
-  { "id": "easy_004", "text": "I'm at the Wispr Flow booth and just beat my typing speed.", "category": "easy", "difficulty": "easy" },
-  { "id": "easy_005", "text": "Let me know when you're free and we can grab a coffee.", "category": "easy", "difficulty": "easy" },
-  { "id": "easy_006", "text": "Sounds good. I'll follow up with the details tomorrow morning.", "category": "easy", "difficulty": "easy" },
-  { "id": "easy_007", "text": "Just landed. Heading to the venue now, see you very soon.", "category": "easy", "difficulty": "easy" },
-
-  { "id": "work_001", "text": "Quick update: the launch is on track but we need final approval on the creative.", "category": "work", "difficulty": "medium" },
-  { "id": "work_002", "text": "Thanks for the intro. I'd love to learn more about what your team is building.", "category": "work", "difficulty": "medium" },
-  { "id": "work_003", "text": "Can we move tomorrow's sync by 30 minutes? I have a conflict that just came up.", "category": "work", "difficulty": "medium" },
-  { "id": "work_004", "text": "Following up on our conversation. When would be a good time to connect this week?", "category": "work", "difficulty": "medium" },
-  { "id": "work_005", "text": "The report is ready. I've shared it in the Drive folder with everyone on the team.", "category": "work", "difficulty": "medium" },
-  { "id": "work_006", "text": "Happy to jump on a quick call to walk you through the numbers before the meeting.", "category": "work", "difficulty": "medium" },
-
-  { "id": "founder_001", "text": "The product insight is simple: people think faster than they type.", "category": "founder", "difficulty": "medium" },
-  { "id": "founder_002", "text": "We're building the input layer for the AI-native workplace.", "category": "founder", "difficulty": "medium" },
-  { "id": "founder_003", "text": "We're seeing strong retention from power users and want to double down on teams.", "category": "founder", "difficulty": "medium" },
-  { "id": "founder_004", "text": "Voice is the interface that humans were born to use. We just forgot about it.", "category": "founder", "difficulty": "medium" },
-  { "id": "founder_005", "text": "The fastest keyboard is no keyboard. Your voice is already faster.", "category": "founder", "difficulty": "easy" },
-
-  { "id": "mixer_001", "text": "Really great event tonight. Looking forward to staying in touch after this.", "category": "mixer", "difficulty": "easy" },
-  { "id": "mixer_002", "text": "It was great to meet you. I'll send over that article I mentioned tomorrow.", "category": "mixer", "difficulty": "easy" },
-  { "id": "mixer_003", "text": "Such a good crowd here tonight. Let's make sure we connect before you leave.", "category": "mixer", "difficulty": "easy" },
-
-  { "id": "funny_001", "text": "My keyboard has filed a formal complaint against Wispr Flow.", "category": "funny", "difficulty": "easy" },
-  { "id": "funny_002", "text": "I came for networking and accidentally discovered I type like a potato.", "category": "funny", "difficulty": "easy" },
-  { "id": "funny_003", "text": "If this message has no typos, it was probably not typed by me.", "category": "funny", "difficulty": "easy" },
-  { "id": "funny_004", "text": "Breaking news: local keyboard replaced by human voice, immediately files for unemployment.", "category": "funny", "difficulty": "medium" },
-
-  { "id": "hinglish_001", "text": "Kal ka plan confirm kar do, I'll reach by 7:30.", "category": "hinglish", "difficulty": "easy" },
-  { "id": "hinglish_002", "text": "Mujhe deck bhej dena, I'll review it after the event.", "category": "hinglish", "difficulty": "easy" },
-  { "id": "hinglish_003", "text": "This app is actually kaafi useful if you write a lot every day.", "category": "hinglish", "difficulty": "medium" },
-  { "id": "hinglish_004", "text": "Main registration desk ke paas hoon, come find me after the panel.", "category": "hinglish", "difficulty": "medium" },
-  { "id": "hinglish_005", "text": "Yaar, I just realized I haven't sent that email yet. Sending it right now.", "category": "hinglish", "difficulty": "medium" },
-  { "id": "hinglish_006", "text": "Aaj ka session bahut insightful tha, definitely following up with them.", "category": "hinglish", "difficulty": "medium" },
-
-  { "id": "royale_001", "text": "Write a Slack message saying you'll be 10 minutes late but will send notes after the call.", "category": "royale", "difficulty": "easy" },
-  { "id": "royale_002", "text": "Write a follow-up message after meeting someone interesting at this mixer tonight.", "category": "royale", "difficulty": "easy" },
-  { "id": "royale_003", "text": "Write a LinkedIn post about discovering a faster way to communicate at work.", "category": "royale", "difficulty": "medium" },
-  { "id": "royale_004", "text": "Write a short investor update: the launch is on track but hiring is moving slowly.", "category": "royale", "difficulty": "medium" },
-  { "id": "royale_005", "text": "Write a quick email to a new contact you met at an event, keeping it warm and brief.", "category": "royale", "difficulty": "easy" },
-
-  { "id": "ol_001", "text": "I'll follow up with you first thing Monday morning.", "category": "one_liner" },
-  { "id": "ol_002", "text": "Can you drop that in the shared folder by end of day?", "category": "one_liner" },
-  { "id": "ol_003", "text": "Looking forward to connecting after the session tonight.", "category": "one_liner" },
-  { "id": "ol_004", "text": "Let's sync for fifteen minutes before the big meeting tomorrow.", "category": "one_liner" },
-  { "id": "ol_005", "text": "Great talk. I'll send over the notes and next steps.", "category": "one_liner" },
-  { "id": "ol_006", "text": "My voice is literally faster than my fingers right now.", "category": "one_liner" },
-  { "id": "ol_007", "text": "Happy to jump on a quick call later this afternoon.", "category": "one_liner" },
-  { "id": "ol_008", "text": "The team needs this by Friday or the launch slips again.", "category": "one_liner" },
-  { "id": "ol_009", "text": "This tool just replaced my keyboard for everything I do.", "category": "one_liner" },
-  { "id": "ol_010", "text": "Just finished back to back calls. Finally catching up on email.", "category": "one_liner" },
-  { "id": "ol_011", "text": "We should do a demo for the whole team next week.", "category": "one_liner" },
-  { "id": "ol_012", "text": "Can we get the contract review done before Thursday morning?", "category": "one_liner" },
-  { "id": "ol_013", "text": "That panel was incredible. So many good ideas to steal.", "category": "one_liner" },
-  { "id": "ol_014", "text": "Running five minutes late, save me a seat near the front.", "category": "one_liner" },
-  { "id": "ol_015", "text": "I think we should move the deadline to give everyone breathing room.", "category": "one_liner" },
-  { "id": "ol_016", "text": "Send me the budget numbers when you get a chance today.", "category": "one_liner" },
-  { "id": "ol_017", "text": "The product shipped on time which honestly shocked everyone.", "category": "one_liner" },
-  { "id": "ol_018", "text": "Great energy in this room. Really glad I came tonight.", "category": "one_liner" },
-  { "id": "ol_019", "text": "I spoke three paragraphs while you typed one sentence.", "category": "one_liner" },
-  { "id": "ol_020", "text": "Let me know if you want to grab coffee before you leave.", "category": "one_liner" },
-  { "id": "ol_021", "text": "Your voice is the fastest keyboard you will ever own.", "category": "one_liner" },
-  { "id": "ol_022", "text": "I need to think out loud more often. This really works.", "category": "one_liner" }
+  {
+    "id": "rap_001",
+    "text": "Quick wit, slick steps, I pivot through the pressure; every syllable is measured, every breath becomes a treasure.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_002",
+    "text": "Bright ideas ignite while the night rewrites the skyline; I climb by design, one precise rhyme at a time.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_003",
+    "text": "Calm in the chaos, I calculate the cadence; patient with the pace, then I race beyond the basics.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_004",
+    "text": "Fresh pages catch phrases as fast as I can frame them; thoughts turn to thunder the moment that I name them.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_005",
+    "text": "I balance every vowel on a wire above the rhythm, then deliver crystal clear before the clock can catch the vision.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_006",
+    "text": "Momentum in my message, every second sets a record; clever letters leap together, light as feathers, sharp as checkers.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_007",
+    "text": "No shortcut to the summit, so I sprint across the sentence; turning effort into excellence with energetic presence.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_008",
+    "text": "Rapid rhythm, vivid vision, every pivot has precision; I can flip a tricky phrase into a confident decision.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_009",
+    "text": "The beat keeps breathing while my meaning keeps expanding; every bar is built to last, but still light enough for landing.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_010",
+    "text": "I map a maze of phrases, make the complicated simple; place a spark inside a sentence, watch it ripple from the middle.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_011",
+    "text": "Silver sounds surround the room, a smooth succession of surprises; I revise the rise and fall until the final line arises.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_012",
+    "text": "Every minute is a mission, every message needs momentum; I collect the scattered seconds, then connect and redirect them.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_013",
+    "text": "Clean lines, keen mind, I keep the sequence moving; when the wording starts to wander, I return it to the groove.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_014",
+    "text": "Tiny turns of language make a larger picture brighter; I can juggle double meanings while the tempo climbs up higher.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_015",
+    "text": "Words whirl, worlds form, every thought becomes a doorway; I arrive before the echo and I leave a clearer pathway.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_016",
+    "text": "Brisk breeze, big dreams, both begin with bold direction; I refine the rough reflection till it shines with sharp intention.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_017",
+    "text": "From a whisper to a wave, I shape the sound into a story; every stumble turns to study, every practice point to glory.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_018",
+    "text": "Precise pronunciation powers playful patterns through the passage; steady speed and careful clarity can turn a test to magic.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_019",
+    "text": "I stack a clever clause beside a chorus of consonants; the challenge keeps me curious, the finish feels astonishing.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  },
+  {
+    "id": "rap_020",
+    "text": "Fast facts flash past, but I catch them with composure; lock the rhythm to the reason, then complete it with closure.",
+    "category": "one_liner",
+    "difficulty": "hard"
+  }
 ]

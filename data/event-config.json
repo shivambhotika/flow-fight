@@ -8,6 +8,7 @@
   ],
   "roundSeconds": 60,
   "countdownSeconds": 3,
+  "transitionSeconds": 10,
   "resultsSeconds": 15,
   "ctaSeconds": 10,
   "enableVoiceMode": true,

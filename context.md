@@ -14,9 +14,10 @@ Flow Fight is a Wispr Flow activation game that lets one person compare how much
    - using push-to-talk, transcribed through OpenAI's Audio Transcriptions API, or
    - typing any name directly.
 4. Round 1 is a 60-second keyboard challenge.
-5. Round 2 is a 60-second voice challenge designed for Wispr Flow dictation into the focused voice box.
-6. Results compare typed words with spoken words and show the player's voice multiplier.
-7. The shared leaderboard is updated, then the app resets for the next player.
+5. A 10-second transition gives the player time to switch input methods.
+6. Round 2 is a 60-second voice challenge designed for Wispr Flow dictation into the focused voice box.
+7. Results compare typed words with spoken words and show the player's voice multiplier.
+8. The shared leaderboard is updated, then the app resets for the next player.
 
 The historical WPM Fight and Voice vs Keyboard modes, the preloaded attendee-name list, and company capture have been removed from the player experience.
 
@@ -26,7 +27,8 @@ The historical WPM Fight and Voice vs Keyboard modes, the preloaded attendee-nam
 - Server: Node.js 20+, Express, and WebSockets in `server.js`.
 - Hosting: Render web service (`render.yaml`). Vercel config remains for compatibility, but Render is the deployed production surface.
 - Data: JSON files under `data/` for prompts, runs, config, and leaderboard.
-- Speech-to-text: server-side call to `POST /v1/audio/transcriptions`, defaulting to `gpt-4o-mini-transcribe`.
+- Challenge content: 20 original, clean rap-style micro-verses with dense alliteration and internal rhyme. No copyrighted artist lyrics are stored.
+- Speech-to-text: server-side call to `POST /v1/audio/transcriptions`, defaulting to the currently recommended file-transcription model, `gpt-transcribe`.
 
 ### Independent multi-device sessions
 
@@ -49,7 +51,7 @@ Required production variables:
 
 ```text
 OPENAI_API_KEY=<secret server-side key>
-OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+OPENAI_TRANSCRIBE_MODEL=gpt-transcribe
 ```
 
 ## Operational notes
@@ -61,6 +63,15 @@ OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
 - A real OpenAI key is intentionally not committed. Configure it in Render's environment settings.
 
 ## Change history
+
+### 2026-08-05 · Rap challenge, speech upgrade, and pacing
+
+- Replaced every playable prompt with a repository of 20 original, clean, challenging rap-style micro-verses. The content evokes rhythmic wordplay without copying Eminem, Drake, or any other artist's lyrics.
+- Increased the between-round transition from 5 seconds to 10 seconds and made it configurable in event settings.
+- Updated push-to-talk transcription to OpenAI's recommended `gpt-transcribe` model and current `languages[]` request format, while preserving the environment-variable override.
+- Added automated smoke coverage for production configuration, the challenge repository, and simultaneous independent sessions on two devices.
+- Removed unused legacy name-list, multiplayer client, and superseded stylesheet files so deleted modes cannot drift back into the active build.
+- Kept the API key server-side only; it is configured as a private Render environment variable and is never committed to Git.
 
 ### 2026-08-04 · Solo-first multi-device rebuild
 

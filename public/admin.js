@@ -23,6 +23,7 @@ function fetchConfig() {
     setVal('cfg-eventName',     cfg.eventName || '');
     setVal('cfg-partnerName',   cfg.partnerName || '');
     setVal('cfg-roundSeconds',  cfg.roundSeconds ?? 25);
+    setVal('cfg-transitionSeconds', cfg.transitionSeconds ?? 10);
     setVal('cfg-qrUrl',         cfg.qrUrl || '');
     setVal('cfg-resultsSeconds',cfg.resultsSeconds ?? 15);
   }).catch(() => {});
@@ -33,6 +34,7 @@ function saveConfig() {
     eventName:     getVal('cfg-eventName'),
     partnerName:   getVal('cfg-partnerName'),
     roundSeconds:  parseInt(getVal('cfg-roundSeconds')) || 60,
+    transitionSeconds: parseInt(getVal('cfg-transitionSeconds')) || 10,
     qrUrl:         getVal('cfg-qrUrl'),
     resultsSeconds:parseInt(getVal('cfg-resultsSeconds')) || 15,
   };
