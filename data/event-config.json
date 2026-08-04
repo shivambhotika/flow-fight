@@ -2,14 +2,13 @@
   "eventId": "event_001",
   "eventName": "Flow Fight",
   "partnerName": "",
-  "defaultMode": "wpm-fight",
+  "defaultMode": "solo-challenge",
   "enabledModes": [
-    "wpm-fight",
-    "voice-vs-keyboard",
     "solo-challenge"
   ],
   "roundSeconds": 60,
   "countdownSeconds": 3,
+  "transitionSeconds": 10,
   "resultsSeconds": 15,
   "ctaSeconds": 10,
   "enableVoiceMode": true,

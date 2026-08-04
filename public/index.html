@@ -24,34 +24,72 @@
 
 <!-- IDLE -->
 <div id="screen-idle" class="screen">
-  <div class="idle-layout">
-    <div class="idle-hero">
-      <div class="game-title">FLOW<br><span>FIGHT</span></div>
-      <p class="game-tagline">Can your keyboard keep up with your voice?</p>
-      <p class="press-any-key">Press any key to start</p>
-    </div>
-    <div class="idle-lb">
-      <div class="lb-title">Top Flow Scores</div>
-      <div id="idle-leaderboard" class="lb-list"></div>
-    </div>
-  </div>
-</div>
+  <div class="idle-shell">
+    <header class="idle-header">
+      <div class="brand-lockup">
+        <div class="brand-mark">W</div>
+        <div>
+          <div class="brand-name">Wispr Flow</div>
+          <div class="brand-caption">Solo speed challenge</div>
+        </div>
+      </div>
+      <div class="live-pill"><span></span> Ready when you are</div>
+    </header>
 
-<!-- MODE SELECT -->
-<div id="screen-mode-select" class="screen">
-  <div class="mode-select-heading">Choose your battle</div>
-  <div class="mode-grid" id="mode-grid"></div>
-  <p class="dim text-sm" style="margin-top:8px">Select a mode or staff will configure one</p>
+    <main class="idle-layout">
+      <section class="idle-hero">
+        <div class="eyebrow">Your voice vs. your keyboard</div>
+        <div class="game-title">FLOW<br><span>FIGHT</span></div>
+        <p class="game-tagline">Type for 60 seconds. Then speak for 60 seconds. See how much faster your ideas move with Flow.</p>
+        <div class="idle-actions">
+          <button class="btn btn-primary btn-lg start-button" onclick="startSoloChallenge()">
+            Start solo challenge <span aria-hidden="true">→</span>
+          </button>
+          <p class="press-any-key">or press any key</p>
+        </div>
+      </section>
+
+      <aside class="challenge-panel">
+        <div class="challenge-label">How it works</div>
+        <div class="challenge-step">
+          <span class="step-number">01</span>
+          <div><strong>Type</strong><small>Complete as many lines as you can.</small></div>
+          <span class="step-time">60s</span>
+        </div>
+        <div class="challenge-step">
+          <span class="step-number">02</span>
+          <div><strong>Speak</strong><small>Repeat the challenge using Wispr Flow.</small></div>
+          <span class="step-time">60s</span>
+        </div>
+        <div class="challenge-outcome">
+          <span>YOUR RESULT</span>
+          <strong>Discover your voice lift</strong>
+        </div>
+      </aside>
+    </main>
+
+    <section class="idle-lb">
+      <div class="lb-heading-row">
+        <div>
+          <div class="lb-title">Top solo scores</div>
+          <p>Shared leaderboard · every run stays independent</p>
+        </div>
+      </div>
+      <div id="idle-leaderboard" class="lb-list"></div>
+    </section>
+  </div>
 </div>
 
 <!-- NAME ENTRY -->
 <div id="screen-name-entry" class="screen">
   <div class="name-entry-wrap">
-    <h2>Who are you?</h2>
+    <div class="name-card">
+      <div class="eyebrow">Solo challenge</div>
+      <h2>What should we call you?</h2>
+      <p class="name-intro">Say your name or type it below. We’ll use it for your score.</p>
 
-    <div class="top-slot">
-      <div id="speech-section" class="speech-row">
-        <button class="speech-btn" id="speech-btn" onclick="startListening()">
+      <div class="speech-card">
+        <button class="speech-btn" id="speech-btn" type="button" onclick="toggleNameRecording()" aria-label="Speak your name">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
             <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
@@ -59,41 +97,30 @@
             <line x1="8" y1="23" x2="16" y2="23"/>
           </svg>
         </button>
-        <p class="speech-status" id="speech-status">Tap to speak your name</p>
-      </div>
-
-      <div id="confirm-section" class="confirm-section" style="display:none">
-        <div class="confirm-label">Ready to race as</div>
-        <div class="confirm-name" id="selected-name"></div>
-        <div class="company-row">
-          <label class="company-label">Company (optional)</label>
-          <input type="text" id="company-input" class="name-search" placeholder="e.g. Wispr, Acme Corp…" style="padding:10px 14px;font-size:14px">
-        </div>
-        <div class="confirm-actions">
-          <button class="btn btn-primary" onclick="confirmName()">That's me — Let's race →</button>
-          <button class="btn btn-ghost" onclick="clearName()">Not me</button>
+        <div>
+          <strong>Push to talk</strong>
+          <p class="speech-status" id="speech-status">Tap once to start, then tap again when you’re done.</p>
         </div>
       </div>
-    </div>
 
-    <div class="search-divider"><span>or search by name</span></div>
+      <div class="search-divider"><span>or type your name</span></div>
 
-    <input
-      type="text"
-      id="name-search"
-      class="name-search"
-      placeholder="Type to search…"
-      autocomplete="off"
-      spellcheck="false"
-      oninput="onNameSearch(this.value)"
-    >
+      <label class="name-input-label" for="name-input">Your name</label>
+      <input
+        type="text"
+        id="name-input"
+        class="name-search"
+        placeholder="e.g. Shivam"
+        autocomplete="name"
+        maxlength="80"
+        oninput="onNameInput(this.value)"
+        onkeydown="if(event.key === 'Enter') confirmName()"
+      >
 
-    <div id="name-list" class="name-list"></div>
-
-    <div id="adhoc-section" style="display:none">
-      <button class="btn btn-secondary btn-sm" style="width:100%" onclick="useAdhocName()">
-        ✏️ Use "<span id="adhoc-name-preview"></span>" as my name
+      <button class="btn btn-primary btn-lg name-continue" id="name-continue" onclick="confirmName()" disabled>
+        Start my challenge →
       </button>
+      <p class="privacy-note">Your audio is used only to transcribe your name and is not stored by this game.</p>
     </div>
   </div>
 </div>

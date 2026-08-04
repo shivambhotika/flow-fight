@@ -1,12 +1,7 @@
 'use strict';
 
 const TABS = [
-  { bucket: '',                   label: '🏆 Top Flow Scores' },
-  { bucket: 'swap-duel',          label: '🔄 Swap Duel' },
-  { bucket: 'voice-vs-keyboard',  label: '🎙️ Voice × Keyboard' },
-  { bucket: 'keyboard-race',      label: '⌨️ Keyboard Race' },
-  { bucket: 'beat-the-keyboard',  label: '🥊 Solo' },
-  { bucket: 'hinglish-hustle',    label: '🇮🇳 Hinglish' },
+  { bucket: 'solo-challenge', label: '⚡ Top Solo Scores' },
 ];
 
 let activeBucket = '';
@@ -105,9 +100,7 @@ function renderLeaderboard(entries) {
   }
   const medals = ['🥇', '🥈', '🥉'];
   const modeShort = {
-    'swap-duel': 'Swap Duel', 'voice-vs-keyboard': 'V×K',
-    'beat-the-keyboard': 'Solo', 'keyboard-race': 'Keyboard',
-    'hinglish-hustle': 'Hinglish', 'prompt-royale': 'Royale',
+    'solo-challenge': 'Solo',
   };
   list.innerHTML = entries.map((e, i) => `
     <div class="lb-full-row ${i < 3 ? 'top-' + (i + 1) : ''}">
