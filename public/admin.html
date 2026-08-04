@@ -63,20 +63,20 @@
   <div class="admin-card">
     <h3>Server Status</h3>
     <div class="status-row">
-      <span>Station 1</span>
-      <span><span class="status-dot" id="dot-s1"></span><span id="status-s1">—</span></span>
+      <span>Connected players</span>
+      <span id="status-players">—</span>
     </div>
     <div class="status-row">
-      <span>Station 2</span>
-      <span><span class="status-dot" id="dot-s2"></span><span id="status-s2">—</span></span>
+      <span>Active solo sessions</span>
+      <span id="status-sessions">—</span>
     </div>
     <div class="status-row">
       <span>Current mode</span>
       <span id="status-mode" style="color:var(--fathom);font-weight:600">—</span>
     </div>
     <div class="status-row">
-      <span>State</span>
-      <span id="status-state" style="font-family:'IBM Plex Mono',monospace;font-size:13px">—</span>
+      <span>Push-to-talk</span>
+      <span id="status-speech">—</span>
     </div>
     <div class="status-row">
       <span>Leaderboard entries</span>
@@ -93,17 +93,6 @@
     <div class="btn-row">
       <button class="btn btn-danger btn-sm" onclick="apiPost('/api/reset')">⏹ Force Reset</button>
       <button class="btn btn-danger btn-sm" onclick="clearLb()">🗑 Clear Leaderboard</button>
-    </div>
-    <div style="margin-top:16px">
-      <div class="field-label" style="margin-bottom:6px">Launch mode</div>
-      <div class="btn-row">
-        <select id="launch-mode-select" class="admin-select" style="flex:1">
-          <option value="wpm-fight">WPM Fight</option>
-          <option value="voice-vs-keyboard">Voice vs Keyboard</option>
-          <option value="solo-challenge">Solo Challenge</option>
-        </select>
-        <button class="btn btn-primary btn-sm" onclick="launchMode()">▶ Launch</button>
-      </div>
     </div>
     <div style="margin-top:16px">
       <div class="field-label" style="margin-bottom:6px">Export data</div>
@@ -127,14 +116,6 @@
         <input type="text" id="cfg-partnerName" class="admin-input" placeholder="Partner Co.">
       </div>
       <div class="field-row">
-        <label class="field-label">Default mode</label>
-        <select id="cfg-defaultMode" class="admin-select">
-          <option value="wpm-fight">WPM Fight</option>
-          <option value="voice-vs-keyboard">Voice vs Keyboard</option>
-          <option value="solo-challenge">Solo Challenge</option>
-        </select>
-      </div>
-      <div class="field-row">
         <label class="field-label">Round duration (seconds)</label>
         <input type="number" id="cfg-roundSeconds" class="admin-input" min="10" max="120" placeholder="25">
       </div>
@@ -147,23 +128,8 @@
         <input type="number" id="cfg-resultsSeconds" class="admin-input" min="5" max="60" placeholder="15">
       </div>
     </div>
-    <div style="margin-top:12px">
-      <div class="field-label" style="margin-bottom:8px">Enabled modes</div>
-      <div class="mode-check-grid" id="mode-checks"></div>
-    </div>
     <div class="btn-row" style="margin-top:16px">
       <button class="btn btn-primary btn-sm" onclick="saveConfig()">Save Config</button>
-    </div>
-  </div>
-
-  <!-- Names import -->
-  <div class="admin-card full-width">
-    <h3>Attendee Names</h3>
-    <p class="dim text-sm" style="margin-bottom:10px">Paste one name per line to replace the current list.</p>
-    <textarea id="names-import" class="admin-input import-area" placeholder="Alice&#10;Bob&#10;Carol&#10;..."></textarea>
-    <div class="btn-row" style="margin-top:10px">
-      <button class="btn btn-secondary btn-sm" onclick="importNames()">Upload Names</button>
-      <span class="toast-status" id="names-saved">Imported!</span>
     </div>
   </div>
 

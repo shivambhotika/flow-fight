@@ -1,16 +1,15 @@
 'use strict';
 
-// ─── Station detection ─────────────────────────────────────────────────────────
-const _pathMatch = location.pathname.match(/\/station\/(\d+)/);
-const STATION_ID = _pathMatch
-  ? parseInt(_pathMatch[1])
-  : parseInt(new URLSearchParams(location.search).get('station')) || 1;
+// Every browser tab gets an isolated server-side solo session. sessionStorage
+// survives reconnects/reloads in the same tab without coupling separate devices.
+const CLIENT_ID = sessionStorage.getItem('flowFightClientId') ||
+  (crypto.randomUUID?.() || `client-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+sessionStorage.setItem('flowFightClientId', CLIENT_ID);
+const STATION_ID = 1; // Kept as the in-session player key for score compatibility.
 
 // ─── Mode config (mirrors server) ─────────────────────────────────────────────
 const MODES_META = {
-  'wpm-fight':          { label: 'WPM Fight',         tagline: 'Pure typing speed — who\'s faster?', icon: '⌨️', playerCount: 2, rounds: 1 },
-  'voice-vs-keyboard':  { label: 'Voice vs Keyboard', tagline: 'One talks. One types. Who wins?',    icon: '🎙️', playerCount: 2, rounds: 1 },
-  'solo-challenge':     { label: 'Solo Challenge',    tagline: 'Type then speak — beat your score.', icon: '🏃', playerCount: 1, rounds: 2 },
+  'solo-challenge': { label: 'Solo Challenge', tagline: 'Type, then speak. See how much faster your ideas flow.', icon: '⚡', playerCount: 1, rounds: 2 },
 };
 
 const BADGE_META = {
@@ -26,11 +25,11 @@ const BADGE_META = {
 let ws            = null;
 let serverSession = null;
 let serverConfig  = null;
-let names         = [];
-let clientState   = null;   // 'mode-select' — client-only pre-session state
 let playerName    = null;
-let playerCompany = '';
-let recognition   = null;
+let nameRecorder  = null;
+let nameStream    = null;
+let nameChunks    = [];
+let isRecordingName = false;
 
 // Race state
 let currentPrompt   = '';
@@ -68,8 +67,8 @@ let nextRaceTimer = null;
 
 // ─── Boot ──────────────────────────────────────────────────────────────────────
 (function init() {
-  el('station-badge').textContent = `STATION ${STATION_ID}`;
-  document.title = `Flow Fight — Station ${STATION_ID}`;
+  el('station-badge').textContent = 'SOLO CHALLENGE';
+  document.title = 'Flow Fight — Solo Challenge';
   document.addEventListener('keydown', globalKeyHandler);
   connectWS();
 })();
@@ -78,7 +77,7 @@ let nextRaceTimer = null;
 function connectWS() {
   const wsProto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   ws = new WebSocket(`${wsProto}//${location.host}`);
-  ws.onopen = () => send({ type: 'station:join', stationId: STATION_ID });
+  ws.onopen = () => send({ type: 'station:join', stationId: STATION_ID, clientId: CLIENT_ID });
 
   ws.onmessage = (e) => {
     try { handleMsg(JSON.parse(e.data)); } catch (err) { console.error(err); }
@@ -100,18 +99,12 @@ function handleMsg(msg) {
 
     case 'state:update':
       serverSession = msg.session;
-      if (msg.config) { serverConfig = msg.config; buildModeGrid(); }
+      if (msg.config) serverConfig = msg.config;
       onStateChange();
       break;
 
     case 'config:update':
       serverConfig = msg.config;
-      buildModeGrid();
-      break;
-
-    case 'names':
-      names = msg.names || [];
-      if (deriveScreen() === 'name-entry') renderNameList(names);
       break;
 
     case 'countdown:tick':
@@ -141,7 +134,6 @@ function handleMsg(msg) {
 
 // ─── Screen routing ────────────────────────────────────────────────────────────
 function onStateChange() {
-  if (serverSession && clientState === 'mode-select') clientState = null;
   const screen = deriveScreen();
   renderScreen(screen);
   populateScreen(screen);
@@ -149,15 +141,11 @@ function onStateChange() {
 
 function deriveScreen() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return 'connecting';
-  if (clientState === 'mode-select') return 'mode-select';
   if (!serverSession) return 'idle';
 
   const { state, players, mode } = serverSession;
   const meta = MODES_META[mode];
   const me   = players?.[STATION_ID];
-
-  // Station 2 spectating a solo mode
-  if (meta?.playerCount === 1 && STATION_ID === 2) return 'spectator';
 
   switch (state) {
     case 'name-entry':      return me?.isReady ? 'waiting' : 'name-entry';
@@ -204,155 +192,115 @@ function populateIdle() {
     .catch(() => renderLeaderboard([], 'idle-leaderboard'));
 }
 
-// ─── MODE SELECT ───────────────────────────────────────────────────────────────
-function buildModeGrid() {
-  const enabled = serverConfig?.enabledModes || Object.keys(MODES_META);
-  const grid = el('mode-grid');
-  if (!grid) return;
-  grid.innerHTML = enabled.map(modeId => {
-    const m = MODES_META[modeId] || serverConfig?.modes?.[modeId];
-    if (!m) return '';
-    return `<div class="mode-card" data-mode="${esc(modeId)}" onclick="selectMode('${esc(modeId)}')">
-      <div class="mode-icon">${m.icon || '🎮'}</div>
-      <div class="mode-label">${esc(m.label)}</div>
-      <div class="mode-tagline">${esc(m.tagline || '')}</div>
-    </div>`;
-  }).join('');
-}
-
-function selectMode(modeId) {
-  clientState = null;
-  send({ type: 'mode:select', mode: modeId });
+// ─── SOLO START ────────────────────────────────────────────────────────────────
+function startSoloChallenge() {
+  if (deriveScreen() !== 'idle') return;
+  send({ type: 'mode:select', mode: 'solo-challenge' });
 }
 
 // ─── NAME ENTRY ────────────────────────────────────────────────────────────────
 function populateNameEntry() {
   playerName = null;
-  playerCompany = '';
-  el('name-search').value = '';
-  el('company-input').value = '';
-  el('confirm-section').style.display = 'none';
-  el('speech-section').style.display = '';
-  el('adhoc-section').style.display = 'none';
-  el('selected-name').textContent = '';
-  renderNameList(names);
-  setupSpeech();
-  setTimeout(() => el('name-search').focus(), 100);
+  const input = el('name-input');
+  input.value = '';
+  onNameInput('');
+  setupNameRecorder();
+  setTimeout(() => input.focus(), 100);
 }
 
-function onNameSearch(query) {
-  const q = query.toLowerCase().trim();
-  const filtered = q ? names.filter(n => n.toLowerCase().includes(q)) : names;
-  renderNameList(filtered);
-  const adhoc = el('adhoc-section');
-  const preview = el('adhoc-name-preview');
-  if (q.length >= 2 && !names.some(n => n.toLowerCase() === q)) {
-    const display = query.trim().replace(/\b\w/g, c => c.toUpperCase());
-    preview.textContent = display;
-    adhoc.style.display = '';
-  } else {
-    adhoc.style.display = 'none';
-  }
-}
-
-function useAdhocName() {
-  const raw = el('name-search').value.trim();
-  if (!raw) return;
-  const display = raw.replace(/\b\w/g, c => c.toUpperCase());
-  selectName(display);
-}
-
-function renderNameList(list) {
-  const container = el('name-list');
-  if (!list.length) { container.innerHTML = '<p class="no-results">No names found</p>'; return; }
-  container.innerHTML = list.slice(0, 20).map(name => {
-    const cls = name === playerName ? 'name-btn selected' : 'name-btn';
-    return `<button class="${cls}" data-name="${esc(name)}">${esc(name)}</button>`;
-  }).join('');
-  container.querySelectorAll('.name-btn').forEach(btn => {
-    btn.addEventListener('click', () => selectName(btn.dataset.name));
-  });
-}
-
-function selectName(name) {
-  playerName = name;
-  el('selected-name').textContent = name;
-  el('speech-section').style.display = 'none';
-  el('confirm-section').style.display = '';
-  const q = el('name-search').value.toLowerCase();
-  renderNameList(q ? names.filter(n => n.toLowerCase().includes(q)) : names);
-}
-
-function clearName() {
-  playerName = null;
-  el('confirm-section').style.display = 'none';
-  el('speech-section').style.display = '';
-  el('adhoc-section').style.display = 'none';
-  renderNameList(names);
+function onNameInput(value) {
+  playerName = String(value || '').trim();
+  const button = el('name-continue');
+  button.disabled = playerName.length < 2;
 }
 
 function confirmName() {
-  if (!playerName) return;
-  playerCompany = el('company-input').value.trim();
-  send({ type: 'player:select', stationId: STATION_ID, name: playerName, company: playerCompany });
+  playerName = el('name-input').value.trim();
+  if (playerName.length < 2) return;
+  send({ type: 'player:select', stationId: STATION_ID, name: playerName });
   send({ type: 'player:ready', stationId: STATION_ID });
 }
 
-// ─── SPEECH ────────────────────────────────────────────────────────────────────
-function setupSpeech() {
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SpeechRec) { el('speech-section').style.display = 'none'; return; }
-  if (recognition) { try { recognition.abort(); } catch (_) {} }
-  recognition = new SpeechRec();
-  recognition.continuous = false;
-  recognition.interimResults = true;
-  recognition.lang = 'en-US';
-  recognition.maxAlternatives = 5;
-
-  recognition.onstart  = () => { el('speech-btn').classList.add('listening'); el('speech-status').textContent = 'Listening…'; };
-  recognition.onend    = () => { el('speech-btn').classList.remove('listening'); el('speech-status').textContent = 'Tap to speak your name'; };
-  recognition.onerror  = (e) => { el('speech-btn').classList.remove('listening'); el('speech-status').textContent = e.error === 'not-allowed' ? 'Mic blocked — search below' : 'Try again'; };
-
-  recognition.onresult = (e) => {
-    const candidates = [];
-    for (let i = 0; i < e.results.length; i++)
-      for (let j = 0; j < e.results[i].length; j++)
-        candidates.push(e.results[i][j].transcript.toLowerCase().trim());
-    for (const t of candidates) { const m = fuzzyMatch(t); if (m) { selectName(m); break; } }
-  };
-}
-
-function startListening() {
-  if (!recognition) return;
-  try { recognition.start(); } catch (_) { recognition.stop(); setTimeout(() => { try { recognition.start(); } catch (_2) {} }, 300); }
-}
-
-function fuzzyMatch(transcript) {
-  const words = transcript.split(/\s+/).filter(w => w.length >= 2);
-  for (const w of words) {
-    const exact = names.find(n => n.toLowerCase() === w); if (exact) return exact;
-    const starts = names.find(n => n.toLowerCase().startsWith(w)); if (starts) return starts;
+// ─── PUSH-TO-TALK NAME ENTRY ──────────────────────────────────────────────────
+function setupNameRecorder() {
+  const button = el('speech-btn');
+  if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+    button.disabled = true;
+    el('speech-status').textContent = 'Voice entry is unavailable here — type your name below.';
+    return;
   }
-  let best = null, bestDist = 3;
-  for (const name of names) {
-    const lower = name.toLowerCase();
-    for (const w of words) {
-      if (Math.abs(w.length - lower.length) > 3) continue;
-      const d = levenshtein(w, lower);
-      if (d < bestDist) { bestDist = d; best = name; }
-    }
-  }
-  return best;
+  button.disabled = serverConfig?.speechEntryEnabled === false;
+  el('speech-status').textContent = button.disabled
+    ? 'Voice entry needs an API key — type your name below.'
+    : 'Tap once to start, then tap again when you’re done.';
 }
 
-function levenshtein(a, b) {
-  const m = a.length, n = b.length;
-  const dp = Array.from({ length: m + 1 }, (_, i) =>
-    Array.from({ length: n + 1 }, (_, j) => i === 0 ? j : j === 0 ? i : 0));
-  for (let i = 1; i <= m; i++)
-    for (let j = 1; j <= n; j++)
-      dp[i][j] = a[i-1] === b[j-1] ? dp[i-1][j-1] : 1 + Math.min(dp[i-1][j], dp[i][j-1], dp[i-1][j-1]);
-  return dp[m][n];
+async function toggleNameRecording() {
+  if (isRecordingName) {
+    nameRecorder?.stop();
+    return;
+  }
+
+  try {
+    nameStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    const preferred = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4']
+      .find(type => MediaRecorder.isTypeSupported(type));
+    nameChunks = [];
+    nameRecorder = new MediaRecorder(nameStream, preferred ? { mimeType: preferred } : undefined);
+    nameRecorder.ondataavailable = event => {
+      if (event.data?.size) nameChunks.push(event.data);
+    };
+    nameRecorder.onstop = transcribeRecordedName;
+    nameRecorder.start();
+    isRecordingName = true;
+    el('speech-btn').classList.add('listening');
+    el('speech-status').textContent = 'Listening… tap again when you’re done.';
+  } catch (error) {
+    isRecordingName = false;
+    el('speech-status').textContent = error?.name === 'NotAllowedError'
+      ? 'Microphone access was blocked — type your name below.'
+      : 'Could not start the microphone — type your name below.';
+  }
+}
+
+async function transcribeRecordedName() {
+  isRecordingName = false;
+  el('speech-btn').classList.remove('listening');
+  el('speech-btn').disabled = true;
+  el('speech-status').textContent = 'Transcribing your name…';
+  nameStream?.getTracks().forEach(track => track.stop());
+
+  try {
+    const blob = new Blob(nameChunks, { type: nameRecorder?.mimeType || 'audio/webm' });
+    const audio = await blobToDataUrl(blob);
+    const response = await fetch('/api/transcribe-name', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio, mimeType: blob.type }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || 'Could not transcribe that.');
+    el('name-input').value = payload.text;
+    onNameInput(payload.text);
+    el('speech-status').textContent = 'Got it. Edit the name if needed, then continue.';
+    el('name-input').focus();
+  } catch (error) {
+    el('speech-status').textContent = error.message || 'Could not transcribe that — type your name below.';
+  } finally {
+    el('speech-btn').disabled = serverConfig?.speechEntryEnabled === false;
+    nameChunks = [];
+    nameRecorder = null;
+    nameStream = null;
+  }
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(blob);
+  });
 }
 
 // ─── WAITING ───────────────────────────────────────────────────────────────────
@@ -401,9 +349,9 @@ function populateCountdown() {
   el('countdown-mode-label').textContent = meta ? `${meta.icon} ${meta.label} — Round ${(s.currentRoundIndex || 0) + 1}` : '';
 
   const p1name = s.players?.[1]?.name || 'Station 1';
-  const p2name = mode === 'solo-challenge' ? '—' : (s.players?.[2]?.name || 'Station 2');
   el('countdown-p1-name').textContent = p1name;
-  el('countdown-p2-name').textContent = p2name;
+  el('countdown-p2-name').style.display = 'none';
+  document.querySelector('.countdown-vs').style.display = 'none';
 
   el('countdown-input-hint').textContent = myMode === 'voice'
     ? '🎙️ Get ready to speak'
@@ -461,9 +409,11 @@ function populateRacing() {
   // Names / labels
   const otherId = STATION_ID === 1 ? 2 : 1;
   el('your-name-display').textContent  = s.players?.[STATION_ID]?.name || `Station ${STATION_ID}`;
-  el('opp-name-display').textContent   = s.players?.[otherId]?.name || (s.mode === 'solo-challenge' ? '—' : `Station ${otherId}`);
+  el('opp-name-display').textContent   = s.players?.[otherId]?.name || '—';
   el('race-mode-badge').textContent    = MODES_META[s.mode]?.label || s.mode;
-  el('race-station-label').textContent = `STATION ${STATION_ID} · ${currentMode.toUpperCase()}`;
+  el('race-station-label').textContent = `YOU · ${currentMode.toUpperCase()}`;
+  document.querySelector('.race-score-bar').classList.add('solo-score');
+  document.querySelector('.score-col.opp-col').style.display = 'none';
 
   // Score bar
   el('your-words').textContent = '0';
@@ -904,6 +854,9 @@ function populateResults() {
   } else if (hasVoice) {
     banner.textContent = `${totalVoWords} words with Wispr Flow`;
     banner.className = 'result-banner voice-lift';
+  } else if (isSoloMode) {
+    banner.textContent = 'Challenge complete';
+    banner.className = 'result-banner solo';
   } else if (winner?.type === 'tie') {
     banner.textContent = "IT'S A TIE!";
     banner.className = 'result-banner tie';
@@ -1075,7 +1028,7 @@ function renderLeaderboard(entries, containerId) {
   if (!entries?.length) { c.innerHTML = '<p class="lb-empty">No scores yet — be the first!</p>'; return; }
   const medals = ['🥇', '🥈', '🥉'];
   const modeShort = {
-    'wpm-fight': 'WPM', 'voice-vs-keyboard': 'V×K', 'solo-challenge': 'Solo',
+    'solo-challenge': 'Solo',
   };
   c.innerHTML = entries.slice(0, 10).map((e, i) =>
     `<div class="lb-row ${i < 3 ? 'top-' + (i + 1) : ''}">
@@ -1093,8 +1046,7 @@ function globalKeyHandler(e) {
   const screen = deriveScreen();
   if (screen === 'idle') {
     if (!e.ctrlKey && !e.metaKey && e.key !== 'Escape') {
-      clientState = 'mode-select';
-      renderScreen('mode-select');
+      startSoloChallenge();
     }
   }
 }

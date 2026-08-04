@@ -1,8 +1,11 @@
 {
   "name": "typing-race",
   "version": "1.0.0",
-  "description": "Two-player typing speed competition kiosk",
+  "description": "Solo Wispr Flow voice-versus-keyboard speed challenge",
   "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
