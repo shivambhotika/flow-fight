@@ -28,7 +28,7 @@ The historical WPM Fight and Voice vs Keyboard modes, the preloaded attendee-nam
 - Hosting: Render web service (`render.yaml`). Vercel config remains for compatibility, but Render is the deployed production surface.
 - Data: JSON files under `data/` for prompts, runs, config, and leaderboard.
 - Challenge content: 20 original, clean rap-style micro-verses with dense alliteration and internal rhyme. Every playable line is punctuation-free so typing and speech rounds use the same simple word sequence. No copyrighted artist lyrics are stored.
-- Prompt matching: typing and voice both use the shared `public/text-match.js` normalizer. A line completes only when the ordered words match exactly; letter case, punctuation, and repeated whitespace are ignored. The server revalidates completion instead of trusting the browser.
+- Prompt matching: typing and voice both use the shared `public/text-match.js` normalizer. The ordered words must match exactly; letter case, punctuation, and repeated whitespace are ignored. Keyboard players press Enter to submit a correct line, while voice lines advance automatically after an exact word match. The server revalidates completion instead of trusting the browser.
 - Brand asset: the landing header and browser tab use the supplied Wispr logo stored at `public/wisprlogo.png` rather than the former text-based placeholder mark.
 - Speech-to-text: server-side call to `POST /v1/audio/transcriptions`, defaulting to the currently recommended file-transcription model, `gpt-transcribe`.
 
@@ -65,6 +65,13 @@ OPENAI_TRANSCRIBE_MODEL=gpt-transcribe
 - A real OpenAI key is intentionally not committed. Configure it in Render's environment settings.
 
 ## Change history
+
+### 2026-08-08 · Explicit Enter submission
+
+- Stopped keyboard prompts from advancing automatically on the final character.
+- Made Enter the only keyboard action that submits a line and advances to the next prompt.
+- Kept submission case- and punctuation-insensitive while preventing Enter, Tab, or ordinary keystrokes from skipping incomplete or incorrect lines.
+- Added a focused regression test for Enter, case variations, punctuation, and incomplete input.
 
 ### 2026-08-08 · Word-only, case-insensitive matching
 

@@ -35,10 +35,15 @@
     return matched;
   }
 
+  function shouldAdvanceOnEnter(key, targetText, enteredText) {
+    return key === 'Enter' && isExactWordMatch(targetText, enteredText);
+  }
+
   return Object.freeze({
     countMatchedWords,
     isExactWordMatch,
     normalizeText,
     normalizeWords,
+    shouldAdvanceOnEnter,
   });
 });

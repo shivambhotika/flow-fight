@@ -1,6 +1,6 @@
 'use strict';
 
-const { countMatchedWords, isExactWordMatch, normalizeText, normalizeWords } = window.FlowFightTextMatch;
+const { countMatchedWords, isExactWordMatch, normalizeText, normalizeWords, shouldAdvanceOnEnter } = window.FlowFightTextMatch;
 
 // Every browser tab gets an isolated server-side solo session. sessionStorage
 // survives reconnects/reloads in the same tab without coupling separate devices.
@@ -473,9 +473,11 @@ function onRaceKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   e.preventDefault();
 
-  // Enter and Tab never bypass word validation.
-  if ((e.key === 'Enter' || e.key === 'Tab') && isMultiLineRound) {
-    checkLineComplete();
+  if (e.key === 'Enter') {
+    submitKeyboardLine(e.key);
+    return;
+  }
+  if (e.key === 'Tab') {
     return;
   }
 
@@ -496,7 +498,6 @@ function onRaceKey(e) {
 
   renderTypingDisplay();
   sendInputUpdate();
-  checkLineComplete();
 }
 
 function renderTypingDisplay() {
@@ -544,7 +545,7 @@ function setRoleLabel(mode, focused) {
       : '⚠️ CLICK THE BOX BELOW — so Wispr Flow knows where to type';
   } else {
     lbl.className = 'role-label mode-keyboard';
-    text.textContent = '⌨️ YOU ARE TYPING';
+    text.textContent = '⌨️ TYPE THE WORDS · PRESS ENTER FOR NEXT LINE';
   }
 }
 
@@ -576,13 +577,21 @@ function normalizeForMatch(t) {
 }
 
 // ── Line completion (multi-line mode) ─────────────────────────────────────────
-function checkLineComplete() {
-  if (!isMultiLineRound) {
-    if (isExactWordMatch(currentPrompt, typedText)) submitRoundFinish(typedText);
+function submitKeyboardLine(key) {
+  const target = isMultiLineRound
+    ? (lineQueue[currentLineIndex]?.text || '')
+    : currentPrompt;
+
+  if (!shouldAdvanceOnEnter(key, target, typedText)) {
+    notify('Match all the words, then press Enter.', 'info');
     return;
   }
-  const target = lineQueue[currentLineIndex]?.text || '';
-  if (isExactWordMatch(target, typedText)) lineComplete('keyboard');
+
+  if (!isMultiLineRound) {
+    submitRoundFinish(typedText);
+    return;
+  }
+  lineComplete('keyboard');
 }
 
 function lineComplete(inputMode) {
