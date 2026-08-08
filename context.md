@@ -29,6 +29,7 @@ The historical WPM Fight and Voice vs Keyboard modes, the preloaded attendee-nam
 - Data: JSON files under `data/` for prompts, runs, config, and leaderboard.
 - Challenge content: 20 original, clean rap-style micro-verses with dense alliteration and internal rhyme. Every playable line is punctuation-free so typing and speech rounds use the same simple word sequence. No copyrighted artist lyrics are stored.
 - Prompt matching: typing and voice both use the shared `public/text-match.js` normalizer. The ordered words must match exactly; letter case, punctuation, and repeated whitespace are ignored. Keyboard players press Enter to submit a correct line, while voice lines advance automatically after an exact word match. The server revalidates completion instead of trusting the browser.
+- Voice field sanitization: during the voice round only, Unicode punctuation inserted by Wispr Flow is replaced with normalized spacing as it arrives. Capitalization, focus, and caret position are preserved so dictation can continue uninterrupted; the cleaned value is what the browser displays and sends to the server.
 - Brand asset: the landing header and browser tab use the supplied Wispr logo stored at `public/wisprlogo.png` rather than the former text-based placeholder mark.
 - Speech-to-text: server-side call to `POST /v1/audio/transcriptions`, defaulting to the currently recommended file-transcription model, `gpt-transcribe`.
 
@@ -65,6 +66,13 @@ OPENAI_TRANSCRIBE_MODEL=gpt-transcribe
 - A real OpenAI key is intentionally not committed. Configure it in Render's environment settings.
 
 ## Change history
+
+### 2026-08-08 · Punctuation-free voice field
+
+- Sanitized the active voice-round textarea on every dictation update so punctuation is never retained in the visible or submitted value.
+- Replaced punctuation with normalized spacing to avoid accidentally joining adjacent words.
+- Preserved capitalization and remapped the text selection after cleanup so Wispr Flow can continue dictating without losing focus or moving the cursor unexpectedly.
+- Added regression tests for ASCII and Unicode punctuation, capitalization, word boundaries, and caret preservation.
 
 ### 2026-08-08 · Explicit Enter submission
 

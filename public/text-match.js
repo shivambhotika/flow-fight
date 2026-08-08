@@ -39,11 +39,34 @@
     return key === 'Enter' && isExactWordMatch(targetText, enteredText);
   }
 
+  function sanitizeVoiceText(value) {
+    return String(value || '')
+      .replace(/\p{P}+/gu, ' ')
+      .replace(/[^\S\r\n]+/g, ' ');
+  }
+
+  function sanitizeVoiceSelection(value, selectionStart, selectionEnd = selectionStart) {
+    const source = String(value || '');
+    const text = sanitizeVoiceText(source);
+    const mapPosition = position => Math.min(
+      text.length,
+      sanitizeVoiceText(source.slice(0, Math.max(0, Number(position) || 0))).length,
+    );
+
+    return {
+      text,
+      selectionStart: mapPosition(selectionStart),
+      selectionEnd: mapPosition(selectionEnd),
+    };
+  }
+
   return Object.freeze({
     countMatchedWords,
     isExactWordMatch,
     normalizeText,
     normalizeWords,
+    sanitizeVoiceSelection,
+    sanitizeVoiceText,
     shouldAdvanceOnEnter,
   });
 });
