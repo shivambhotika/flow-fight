@@ -27,7 +27,8 @@ The historical WPM Fight and Voice vs Keyboard modes, the preloaded attendee-nam
 - Server: Node.js 20+, Express, and WebSockets in `server.js`.
 - Hosting: Render web service (`render.yaml`). Vercel config remains for compatibility, but Render is the deployed production surface.
 - Data: JSON files under `data/` for prompts, runs, config, and leaderboard.
-- Challenge content: 20 original, clean rap-style micro-verses with dense alliteration and internal rhyme. No copyrighted artist lyrics are stored.
+- Challenge content: 20 original, clean rap-style micro-verses with dense alliteration and internal rhyme. Every playable line is punctuation-free so typing and speech rounds use the same simple word sequence. No copyrighted artist lyrics are stored.
+- Brand asset: the landing header and browser tab use the supplied Wispr logo stored at `public/wisprlogo.png` rather than the former text-based placeholder mark.
 - Speech-to-text: server-side call to `POST /v1/audio/transcriptions`, defaulting to the currently recommended file-transcription model, `gpt-transcribe`.
 
 ### Independent multi-device sessions
@@ -63,6 +64,12 @@ OPENAI_TRANSCRIBE_MODEL=gpt-transcribe
 - A real OpenAI key is intentionally not committed. Configure it in Render's environment settings.
 
 ## Change history
+
+### 2026-08-08 · Wispr logo and punctuation-free prompts
+
+- Replaced the circular “W” placeholder in the landing-page brand lockup with the supplied Wispr logo asset and reused it as the browser-tab icon.
+- Removed commas, semicolons, periods, and all other punctuation from every playable prompt used in both typing and speaking rounds.
+- Added smoke-test coverage that prevents punctuation from being reintroduced into playable prompt text and catches a missing logo asset.
 
 ### 2026-08-05 · Rap challenge, speech upgrade, and pacing
 
