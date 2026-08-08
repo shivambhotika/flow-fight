@@ -6,6 +6,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { countMatchedWords, isExactWordMatch, normalizeWords } = require('./public/text-match');
 
 const app = express();
 const server = http.createServer(app);
@@ -95,32 +96,11 @@ function publicConfig() {
 }
 
 function countWords(text) {
-  return String(text || '').trim().split(/\s+/).filter(Boolean).length;
+  return normalizeWords(text).length;
 }
 
-function countPartialWords(targetText, enteredText, inputMode) {
-  if (!enteredText || enteredText.length < 2) return 0;
-  if (inputMode !== 'voice') {
-    const target = targetText || '';
-    let correct = 0;
-    for (let i = 0; i < Math.min(enteredText.length, target.length); i += 1) {
-      if (enteredText[i] === target[i]) correct += 1;
-    }
-    return Math.floor(correct / 5);
-  }
-
-  const normalize = value => String(value || '')
-    .toLowerCase()
-    .replace(/[.,!?;:'"—–]/g, '')
-    .split(/\s+/)
-    .filter(Boolean);
-  const targetWords = normalize(targetText);
-  const enteredWords = normalize(enteredText);
-  let matched = 0;
-  for (let i = 0; i < Math.min(targetWords.length, enteredWords.length); i += 1) {
-    if (targetWords[i] === enteredWords[i]) matched += 1;
-  }
-  return matched;
+function countPartialWords(targetText, enteredText) {
+  return countMatchedWords(targetText, enteredText);
 }
 
 function assignBadges(keyboardWords, voiceWords, keyboardErrors) {
@@ -305,7 +285,10 @@ function handleLineComplete(runtime, message) {
   const state = session.stationState[1];
   if (!round || !state || Number(message.lineIdx) !== state.lineIdx) return;
 
-  state.completedWords += countWords(round.lineQueue[state.lineIdx]?.text || '');
+  const targetText = round.lineQueue[state.lineIdx]?.text || '';
+  if (!isExactWordMatch(targetText, state.lastValue)) return;
+
+  state.completedWords += countWords(targetText);
   state.lineIdx += 1;
   state.lastValue = '';
   if (message.errors !== undefined) state.errors = Number(message.errors) || 0;
