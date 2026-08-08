@@ -1,5 +1,7 @@
 'use strict';
 
+const { countMatchedWords, isExactWordMatch, normalizeText, normalizeWords } = window.FlowFightTextMatch;
+
 // Every browser tab gets an isolated server-side solo session. sessionStorage
 // survives reconnects/reloads in the same tab without coupling separate devices.
 const CLIENT_ID = sessionStorage.getItem('flowFightClientId') ||
@@ -471,18 +473,25 @@ function onRaceKey(e) {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   e.preventDefault();
 
-  // Enter or Tab advances to next line in multi-line mode (errors don't matter)
+  // Enter and Tab never bypass word validation.
   if ((e.key === 'Enter' || e.key === 'Tab') && isMultiLineRound) {
-    if (typedText.length > 0) lineComplete('keyboard');
+    checkLineComplete();
     return;
   }
 
   if (e.key === 'Backspace') {
     if (typedText.length > 0) { typedText = typedText.slice(0, -1); backspaces++; }
-  } else if (e.key.length === 1 && typedText.length < currentPrompt.length + 5) {
-    // Allow a small overshoot buffer so last char always registers
-    if (typedText.length < currentPrompt.length && e.key !== currentPrompt[typedText.length]) corrections++;
+  } else if (e.key.length === 1 && typedText.length < currentPrompt.length * 3 + 50) {
+    const before = normalizeForMatch(typedText);
     typedText += e.key;
+    const after = normalizeForMatch(typedText);
+    const target = normalizeForMatch(currentPrompt);
+
+    // Count only meaningful letter/number mismatches. Case, punctuation, and
+    // repeated whitespace disappear during normalization and never add errors.
+    for (let index = before.length; index < after.length; index += 1) {
+      if (after[index] !== target[index]) corrections += 1;
+    }
   } else { return; }
 
   renderTypingDisplay();
@@ -491,10 +500,12 @@ function onRaceKey(e) {
 }
 
 function renderTypingDisplay() {
+  const entered = normalizeForMatch(typedText);
+  const target = normalizeForMatch(currentPrompt);
   const html = currentPrompt.split('').map((char, i) => {
     let cls;
-    if (i < typedText.length)      cls = typedText[i] === char ? 'correct' : 'wrong';
-    else if (i === typedText.length) cls = 'cursor';
+    if (i < entered.length)      cls = entered[i] === target[i] ? 'correct' : 'wrong';
+    else if (i === entered.length) cls = 'cursor';
     else                            cls = 'upcoming';
     return `<span class="char ${cls}">${char === ' ' ? '&nbsp;' : esc(char)}</span>`;
   }).join('');
@@ -550,49 +561,33 @@ function onVoiceInput(e) {
     }
   } else {
     // Single-prompt voice mode (prompt-royale)
-    const target  = normalizeForMatch(currentPrompt);
-    const current = normalizeForMatch(value);
-    if (current.length >= target.length * 0.9 && target.length > 0) {
+    if (isExactWordMatch(currentPrompt, value)) {
       submitRoundFinish(value);
     }
   }
 }
 
 function isVoiceLineComplete(targetText, spokenText) {
-  const targetWords = targetText.toLowerCase().replace(/[.,!?;:'"—–]/g, '').split(/\s+/).filter(Boolean);
-  const spokenWords = spokenText.toLowerCase().replace(/[.,!?;:'"—–]/g, '').split(/\s+/).filter(Boolean);
-  if (targetWords.length === 0) return false;
-
-  // Subsequence match: find target words appearing in order within spoken words
-  let matches = 0;
-  let spokenIdx = 0;
-  for (let t = 0; t < targetWords.length && spokenIdx < spokenWords.length; ) {
-    if (spokenWords[spokenIdx] === targetWords[t]) { matches++; t++; }
-    spokenIdx++;
-  }
-
-  const matchRatio = matches / targetWords.length;
-  return matchRatio >= 0.75 && spokenWords.length >= targetWords.length * 0.75;
+  return isExactWordMatch(targetText, spokenText);
 }
 
 function normalizeForMatch(t) {
-  return t.toLowerCase().replace(/[.,!?;:'"]/g, '').replace(/\s+/g, ' ').trim();
+  return normalizeText(t);
 }
 
 // ── Line completion (multi-line mode) ─────────────────────────────────────────
 function checkLineComplete() {
   if (!isMultiLineRound) {
-    if (typedText === currentPrompt) submitRoundFinish(typedText);
+    if (isExactWordMatch(currentPrompt, typedText)) submitRoundFinish(typedText);
     return;
   }
-  // Errors don't block progress — advance as soon as the full line length is typed
   const target = lineQueue[currentLineIndex]?.text || '';
-  if (typedText.length >= target.length) lineComplete('keyboard');
+  if (isExactWordMatch(target, typedText)) lineComplete('keyboard');
 }
 
 function lineComplete(inputMode) {
   const lineText  = lineQueue[currentLineIndex]?.text || '';
-  const wordCount = lineText.trim().split(/\s+/).filter(Boolean).length;
+  const wordCount = normalizeWords(lineText).length;
 
   completedLinesList.push({ text: lineText, wordCount });
   completedWords += wordCount;
@@ -707,7 +702,8 @@ function updateRaceStats() {
   } else if (currentMode === 'keyboard') {
     // Single-prompt WPM display
     const wpm = calcWpm(typedText);
-    const pct = currentPrompt.length > 0 ? typedText.length / currentPrompt.length : 0;
+    const targetWords = normalizeWords(currentPrompt).length;
+    const pct = targetWords > 0 ? countMatchedWords(currentPrompt, typedText) / targetWords : 0;
     el('your-words').textContent = wpm;
     el('your-wpm').textContent   = wpm;
     el('your-progress-bar').style.width = `${Math.round(pct * 100)}%`;
@@ -718,8 +714,7 @@ function calcWpm(text) {
   if (!raceStartTime) return 0;
   const mins = (Date.now() - raceStartTime) / 60000;
   if (mins < 0.001) return 0;
-  const correct = [...(text || '')].filter((c, i) => c === currentPrompt[i]).length;
-  return Math.round((correct / 5) / mins);
+  return Math.round(countMatchedWords(currentPrompt, text) / mins);
 }
 
 function checkCameraCallouts() {

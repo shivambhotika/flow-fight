@@ -28,6 +28,7 @@ The historical WPM Fight and Voice vs Keyboard modes, the preloaded attendee-nam
 - Hosting: Render web service (`render.yaml`). Vercel config remains for compatibility, but Render is the deployed production surface.
 - Data: JSON files under `data/` for prompts, runs, config, and leaderboard.
 - Challenge content: 20 original, clean rap-style micro-verses with dense alliteration and internal rhyme. Every playable line is punctuation-free so typing and speech rounds use the same simple word sequence. No copyrighted artist lyrics are stored.
+- Prompt matching: typing and voice both use the shared `public/text-match.js` normalizer. A line completes only when the ordered words match exactly; letter case, punctuation, and repeated whitespace are ignored. The server revalidates completion instead of trusting the browser.
 - Brand asset: the landing header and browser tab use the supplied Wispr logo stored at `public/wisprlogo.png` rather than the former text-based placeholder mark.
 - Speech-to-text: server-side call to `POST /v1/audio/transcriptions`, defaulting to the currently recommended file-transcription model, `gpt-transcribe`.
 
@@ -64,6 +65,13 @@ OPENAI_TRANSCRIBE_MODEL=gpt-transcribe
 - A real OpenAI key is intentionally not committed. Configure it in Render's environment settings.
 
 ## Change history
+
+### 2026-08-08 · Word-only, case-insensitive matching
+
+- Unified keyboard, voice, partial-score, and server-side completion logic around one shared word normalizer.
+- Made capitalization, punctuation, and repeated whitespace irrelevant to line acceptance and error counting.
+- Replaced the permissive 75% voice subsequence rule and character-length keyboard rule with exact ordered-word matching.
+- Prevented Enter or Tab from advancing a line that does not match, and added tests for accepted and rejected variants.
 
 ### 2026-08-08 · Wispr logo and punctuation-free prompts
 

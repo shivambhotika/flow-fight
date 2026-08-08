@@ -106,10 +106,11 @@ test('challenge repository contains 20 clean rap-style prompts only', () => {
   assert.ok(prompts.every(prompt => !/[^\p{L}\p{N}\s]/u.test(prompt.text)));
 });
 
-test('landing page uses the packaged Wispr logo', () => {
+test('landing page packages the Wispr logo and loads the shared matcher first', () => {
   const html = fs.readFileSync(path.join(projectRoot, 'public', 'index.html'), 'utf8');
   const logoPath = path.join(projectRoot, 'public', 'wisprlogo.png');
   assert.match(html, /<img[^>]+src="\/wisprlogo\.png"/);
+  assert.ok(html.indexOf('/text-match.js') < html.indexOf('/app.js'));
   assert.ok(fs.statSync(logoPath).size > 0);
 });
 
