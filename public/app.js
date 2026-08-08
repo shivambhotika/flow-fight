@@ -1,6 +1,13 @@
 'use strict';
 
-const { countMatchedWords, isExactWordMatch, normalizeText, normalizeWords, shouldAdvanceOnEnter } = window.FlowFightTextMatch;
+const {
+  countMatchedWords,
+  isExactWordMatch,
+  normalizeText,
+  normalizeWords,
+  sanitizeVoiceSelection,
+  shouldAdvanceOnEnter,
+} = window.FlowFightTextMatch;
 
 // Every browser tab gets an isolated server-side solo session. sessionStorage
 // survives reconnects/reloads in the same tab without coupling separate devices.
@@ -551,7 +558,19 @@ function setRoleLabel(mode, focused) {
 
 function onVoiceInput(e) {
   if (deriveScreen() !== 'racing' || currentMode !== 'voice') return;
-  const value = e.target.value;
+  const textarea = e.target;
+  const sanitized = sanitizeVoiceSelection(
+    textarea.value,
+    textarea.selectionStart ?? textarea.value.length,
+    textarea.selectionEnd ?? textarea.value.length,
+  );
+
+  if (sanitized.text !== textarea.value) {
+    textarea.value = sanitized.text;
+    textarea.setSelectionRange(sanitized.selectionStart, sanitized.selectionEnd);
+  }
+
+  const value = sanitized.text;
   sendInputUpdate(value);
 
   if (isMultiLineRound) {

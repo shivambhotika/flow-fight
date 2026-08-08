@@ -7,6 +7,8 @@ const {
   isExactWordMatch,
   normalizeText,
   normalizeWords,
+  sanitizeVoiceSelection,
+  sanitizeVoiceText,
   shouldAdvanceOnEnter,
 } = require('../public/text-match');
 
@@ -36,4 +38,19 @@ test('only Enter advances an exactly matched case-insensitive line', () => {
   assert.equal(shouldAdvanceOnEnter('Tab', target, accepted), false);
   assert.equal(shouldAdvanceOnEnter('s', target, accepted), false);
   assert.equal(shouldAdvanceOnEnter('Enter', target, 'quick wit slick'), false);
+});
+
+test('voice sanitization removes Unicode punctuation without changing case', () => {
+  const input = 'Quick, WIT! “Slick”—steps…';
+  const output = sanitizeVoiceText(input);
+  assert.equal(output, 'Quick WIT Slick steps ');
+  assert.doesNotMatch(output, /\p{P}/u);
+});
+
+test('voice sanitization preserves a usable caret position', () => {
+  assert.deepEqual(sanitizeVoiceSelection('Hello, WORLD!', 13, 13), {
+    text: 'Hello WORLD ',
+    selectionStart: 12,
+    selectionEnd: 12,
+  });
 });
