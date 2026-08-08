@@ -7,6 +7,7 @@ const {
   isExactWordMatch,
   normalizeText,
   normalizeWords,
+  shouldAdvanceOnEnter,
 } = require('../public/text-match');
 
 test('normalization ignores case punctuation and repeated whitespace', () => {
@@ -26,4 +27,13 @@ test('exact matching compares only the complete word sequence', () => {
 test('partial scoring counts only correctly positioned normalized words', () => {
   assert.equal(countMatchedWords('Quick wit slick steps', 'QUICK, wrong slick! steps.'), 3);
   assert.equal(countMatchedWords('Quick wit slick steps', 'quick wit'), 2);
+});
+
+test('only Enter advances an exactly matched case-insensitive line', () => {
+  const target = 'Quick wit slick steps';
+  const accepted = 'QUICK, wit! Slick... STEPS?';
+  assert.equal(shouldAdvanceOnEnter('Enter', target, accepted), true);
+  assert.equal(shouldAdvanceOnEnter('Tab', target, accepted), false);
+  assert.equal(shouldAdvanceOnEnter('s', target, accepted), false);
+  assert.equal(shouldAdvanceOnEnter('Enter', target, 'quick wit slick'), false);
 });
