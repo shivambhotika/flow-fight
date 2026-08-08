@@ -2,6 +2,7 @@
 
 const assert = require('node:assert/strict');
 const { spawn } = require('node:child_process');
+const fs = require('node:fs');
 const net = require('node:net');
 const path = require('node:path');
 const test = require('node:test');
@@ -102,6 +103,14 @@ test('challenge repository contains 20 clean rap-style prompts only', () => {
   assert.equal(new Set(prompts.map(prompt => prompt.id)).size, 20);
   assert.ok(prompts.every(prompt => prompt.category === 'one_liner'));
   assert.ok(prompts.every(prompt => prompt.difficulty === 'hard'));
+  assert.ok(prompts.every(prompt => !/[^\p{L}\p{N}\s]/u.test(prompt.text)));
+});
+
+test('landing page uses the packaged Wispr logo', () => {
+  const html = fs.readFileSync(path.join(projectRoot, 'public', 'index.html'), 'utf8');
+  const logoPath = path.join(projectRoot, 'public', 'wisprlogo.png');
+  assert.match(html, /<img[^>]+src="\/wisprlogo\.png"/);
+  assert.ok(fs.statSync(logoPath).size > 0);
 });
 
 test('two devices receive independent solo sessions', async () => {

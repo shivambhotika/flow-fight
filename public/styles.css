@@ -154,7 +154,7 @@ html, body {
 .idle-shell { width: 100%; max-width: 1180px; margin: 0 auto; }
 .idle-header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--border); }
 .brand-lockup { display: flex; align-items: center; gap: 12px; }
-.brand-mark { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 50%; background: var(--vast); color: var(--lumen); font-family: 'EB Garamond', serif; font-size: 22px; }
+.brand-mark { width: 38px; height: 38px; display: block; object-fit: contain; }
 .brand-name { font-weight: 700; line-height: 1; }
 .brand-caption { margin-top: 4px; color: var(--text-dim); font-size: 10px; text-transform: uppercase; letter-spacing: .13em; }
 .live-pill { display: flex; align-items: center; gap: 8px; border: 1px solid var(--border); border-radius: var(--r-pill); padding: 8px 13px; font-size: 12px; font-weight: 600; }
